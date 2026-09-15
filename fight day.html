@@ -183,7 +183,7 @@
         skin: { base: "#e1b182", dark: "#9c6d42", high: "#fcdbb8" },
         build: { scaleX: 1, scaleY: 1, muscle: 1, belly: 0, jaw: 1 },
         stats: { power: 10, speed: 10, defense: 10, stamina: 10, accuracy: 10, reach: 10, heart: 10, aggro: 0.5 },
-        hp: 100, maxHp: 100, sta: 100, maxSta: 100, knockdowns: 0,
+        hp: 100, maxHp: 100, sta: 100, maxSta: 100, knockdowns: 0, blockTarget: 'head', attackTarget: 'head',
         state: 'idle', stateTimer: 0, worldX: 0, worldZ: 140, localX: 0, localY: 0,
         head: { w: 85, h: 110 }, body: { w: 200, h: 220 }, currentAttack: null, dodgeDir: 0, damageFactor: 0
     };
@@ -420,7 +420,7 @@
 
     // --- CORE GAME MECHANICS ---
     function handlePunchInput() {
-        if (mouse.left && mouse.right) { player.isBlocking = true; } 
+        if (mouse.left && mouse.right) { player.isBlocking = mouse.y < 384 ? 'head' : 'body'; }
         else {
             player.isBlocking = false;
             if (player.exhausted || player.dodgeState !== 'none') return;
@@ -490,7 +490,12 @@
 
         if (headHit || bodyHit) {
             let dmg = (player.stats.power * 1.3) + (Math.random() * 5);
+            let blocked = false;
             if (opponent.state === 'blocking') {
+                if (headHit && opponent.blockTarget === 'head') blocked = true;
+                if (bodyHit && opponent.blockTarget === 'body') blocked = true;
+            }
+            if (blocked) {
                 dmg *= (15 / (opponent.stats.defense + 15)); 
                 spawnParticles(targetX, targetY, 'sweat'); 
                 spawnText("BLOCKED", targetX - 50, targetY, "#f39c12");
@@ -687,7 +692,7 @@
             } else if (opponent.state === 'dodging') {
                 if (opponent.sta > 15 && view.dist <= oppMaxReach) {
                     opponent.state = 'windup'; opponent.sta -= 12;
-                    opponent.currentAttack = opponent.dodgeDir === 1 ? 'right' : 'left'; 
+                    opponent.currentAttack = opponent.dodgeDir === 1 ? 'right' : 'left'; opponent.attackTarget = Math.random() > 0.5 ? 'head' : 'body';
                     opponent.stateTimer = 220 + (opponent.build.scaleX*30); 
                 } else { opponent.state = 'idle'; opponent.stateTimer = 300; }
             } else if (opponent.state === 'windup') {
@@ -696,20 +701,24 @@
                 if (view.dist <= oppMaxReach) {
                     if (player.dodgeState !== 'none') {
                         spawnText("SLIP!", 512 + (player.dodgeState === 'left' ? -100 : 100), 250, "#00a8ff");
-                    } else if (!player.isBlocking) {
-                        let dmg = (opponent.stats.power * 1.3) + (Math.random() * 5);
-                        player.hp -= dmg; hitStopFrames = 3; flashDamage(); setCamShake(20, 0.08);
-                        if (player.hp <= 0) { player.hp = 0; triggerKnockdown('player'); }
-                    } else { 
-                        player.hp -= (opponent.stats.power * 0.3); player.sta = Math.max(0, player.sta - 10); setCamShake(5, 0.01);
+                    } else {
+                        let blocked = player.isBlocking === opponent.attackTarget;
+                        if (!blocked) {
+                            let dmg = (opponent.stats.power * 1.3) + (Math.random() * 5);
+                            player.hp -= dmg; hitStopFrames = 3; flashDamage(); setCamShake(20, 0.08);
+                            if (player.hp <= 0) { player.hp = 0; triggerKnockdown('player'); }
+                        } else {
+                            player.hp -= (opponent.stats.power * 0.3); player.sta = Math.max(0, player.sta - 10); setCamShake(5, 0.01);
+                            spawnText("BLOCKED", 512, 250, "#f39c12");
+                        }
                     }
                 } else { spawnText("WHIFF!", 512, 200, "#95a5a6"); }
             } else if (opponent.state === 'idle') {
                 if (Math.random() < opponent.stats.aggro && opponent.sta > 20 && view.dist <= oppMaxReach + 10) {
-                    opponent.state = 'windup'; opponent.sta -= 15; opponent.currentAttack = Math.random() > 0.5 ? 'left' : 'right';
+                    opponent.state = 'windup'; opponent.sta -= 15; opponent.currentAttack = Math.random() > 0.5 ? 'left' : 'right'; opponent.attackTarget = Math.random() > 0.5 ? 'head' : 'body';
                     opponent.stateTimer = Math.max(200, 650 - (opponent.stats.speed * 15)) + (opponent.build.scaleX*50); 
                 } else if (Math.random() < opponent.stats.aggro + 0.3) {
-                    opponent.state = 'blocking'; opponent.stateTimer = 600 + Math.random() * 800;
+                    opponent.state = 'blocking'; opponent.blockTarget = Math.random() > 0.5 ? 'head' : 'body'; opponent.stateTimer = 600 + Math.random() * 800;
                 } else { opponent.stateTimer = 300; }
             }
         }
@@ -878,13 +887,18 @@
 
         let lx, ly, rx, ry;
         if (opponent.state === 'blocking') {
-            lx = ox - 35*b.scaleX; ly = oy - 20; rx = ox + 35*b.scaleX; ry = oy - 20;
+            if (opponent.blockTarget === 'head') {
+                lx = ox - 35*b.scaleX; ly = oy - 20; rx = ox + 35*b.scaleX; ry = oy - 20;
+            } else {
+                lx = ox - 35*b.scaleX; ly = oy + 40; rx = ox + 35*b.scaleX; ry = oy + 40;
+            }
         } else if (opponent.state === 'windup' || opponent.state === 'punching') {
             let p = opponent.state === 'punching' ? 1 : 0.2; let ease = 1 - Math.pow(1 - p, 3); 
+            let punchReachY = opponent.attackTarget === 'head' ? 180 : 260;
             if (opponent.currentAttack === 'left') {
-                lx = ox - 60 + (ease*70); ly = oy + 40 + (ease*180); rx = ox + 45*b.scaleX; ry = oy + 60; 
+                lx = ox - 60 + (ease*70); ly = oy + 40 + (ease*punchReachY); rx = ox + 45*b.scaleX; ry = oy + 60;
             } else {
-                lx = ox - 45*b.scaleX; ly = oy + 60; rx = ox + 60 - (ease*70); ry = oy + 40 + (ease*180);
+                lx = ox - 45*b.scaleX; ly = oy + 60; rx = ox + 60 - (ease*70); ry = oy + 40 + (ease*punchReachY);
             }
         } else {
             let bounce = kd.active ? 0 : Math.sin(Date.now()*0.005)*8;
@@ -906,7 +920,12 @@
     }
 
     function drawPlayerDetailed() {
-        if (player.isBlocking) { drawDetailedGlove(350, 500, 140, player.color); drawDetailedGlove(674, 500, 140, player.color); return; }
+        if (player.isBlocking) {
+            let by = player.isBlocking === 'head' ? 500 : 680;
+            drawDetailedGlove(350, by, 140, player.color);
+            drawDetailedGlove(674, by, 140, player.color);
+            return;
+        }
 
         ['left', 'right'].forEach(side => {
             let arm = player.arms[side];
