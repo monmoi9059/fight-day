@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Contender: Realistic Procedural Engine</title>
+    <style>
+        :root { --primary: #e84118; --bg-dark: #000; --panel: rgba(20,20,25,0.9); }
+        body {
+            margin: 0; padding: 0; background-color: #000; color: #fff;
+            font-family: 'Segoe UI', Roboto, Helvetica, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; overflow: hidden; user-select: none;
+            background: radial-gradient(circle at center, #111 0%, #000 100%);
+        }
+        #game-container {
+            position: relative; width: 1024px; height: 768px;
+            background-color: var(--bg-dark);
+            box-shadow: 0 0 50px rgba(232, 65, 24, 0.2), 0 0 0 2px #333;
+            border-radius: 8px; overflow: hidden;
+        }
+        canvas { display: block; cursor: none; width: 100%; height: 100%; }
+        
+        .ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: radial-gradient(circle at center, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.95) 100%);
+            z-index: 10; backdrop-filter: blur(8px);
+        }
+        .hidden { display: none !important; }
+        
+        h1 { color: #fff; font-size: 64px; text-transform: uppercase; font-style: italic; font-weight: 900; letter-spacing: 4px; text-shadow: 0 0 20px var(--primary), 4px 4px 0 #000; margin: 0 0 10px 0; font-family: 'Impact', sans-serif; }
+        h2 { font-size: 28px; color: #fbc531; text-shadow: 2px 2px 5px #000; margin: 10px 0; letter-spacing: 2px; text-transform: uppercase; }
+        
+        button {
+            padding: 15px 40px; margin: 10px; font-size: 22px; font-weight: 900; font-family: 'Impact', sans-serif;
+            color: #fff; background: linear-gradient(135deg, #c23616, var(--primary));
+            border: 2px solid #ff7f50; border-radius: 6px; cursor: pointer; text-transform: uppercase;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.3); transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        button:hover { transform: translateY(-5px) scale(1.05); box-shadow: 0 15px 25px rgba(232, 65, 24, 0.4), inset 0 2px 0 rgba(255,255,255,0.5); }
+        button:active { transform: translateY(2px); box-shadow: 0 5px 10px rgba(0,0,0,0.8); }
+        button:disabled { background: #333; border-color: #555; color: #777; pointer-events: none; }
+        
+        .form-group { margin: 10px 0; width: 350px; }
+        .form-group label { display: block; font-size: 14px; color: #dcdde1; text-transform: uppercase; margin-bottom: 6px; font-weight: bold; letter-spacing: 1px; }
+        .form-group input { width: 100%; padding: 12px; font-size: 18px; font-weight: bold; background: rgba(0,0,0,0.5); color: #fff; border: 2px solid #555; border-radius: 6px; box-sizing: border-box; transition: 0.2s; }
+        .form-group input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 15px rgba(232, 65, 24, 0.3); }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; width: 95%; max-width: 900px; margin: 20px 0; }
+        .stat-card { background: var(--panel); padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #2f3640; box-shadow: 0 5px 15px rgba(0,0,0,0.5); position: relative; overflow: hidden; }
+        .stat-card::before { content: ''; position: absolute; top:0; left:0; width: 100%; height: 3px; background: var(--primary); }
+        .stat-card h4 { margin: 0 0 10px 0; font-size: 18px; color: #f5f6fa; font-family: 'Impact', sans-serif; letter-spacing: 1px; }
+        .stat-card button { padding: 10px 15px; font-size: 16px; margin: 0; }
+
+        .hud { position: absolute; top: 0; width: 100%; padding: 30px; box-sizing: border-box; display: flex; justify-content: space-between; pointer-events: none; z-index: 5; }
+        .hud-side { display: flex; flex-direction: column; width: 350px; }
+        .hud-side.right { align-items: flex-end; }
+        .hud-name { font-size: 28px; text-transform: uppercase; font-style: italic; font-weight: 900; text-shadow: 2px 2px 0 #000, 0 0 10px rgba(0,0,0,0.8); margin-bottom: 8px; font-family: 'Impact', sans-serif; letter-spacing: 1px; }
+        .hud-sub { font-size: 16px; color: #aaa; font-weight: bold; text-shadow: 1px 1px 0 #000; margin-bottom: 5px; }
+        
+        .health-bar-container { width: 100%; height: 26px; background: #111; border: 3px solid #333; border-radius: 4px; overflow: hidden; margin-bottom: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.6); position: relative; }
+        .health-bar-container::after { content:''; position:absolute; top:0; left:0; right:0; height:40%; background:linear-gradient(rgba(255,255,255,0.2), transparent); }
+        .health-bar { height: 100%; background: linear-gradient(90deg, #44bd32, #4cd137); width: 100%; transition: width 0.1s ease-out; box-shadow: 0 0 10px #44bd32; }
+        .stamina-bar { height: 100%; background: linear-gradient(90deg, #0097e6, #00a8ff); width: 100%; transition: width 0.1s ease-out; }
+        
+        #damage-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, rgba(255,0,0,0) 30%, rgba(194,54,22,0.6) 100%); z-index: 4; pointer-events: none; opacity: 0; transition: opacity 0.05s; mix-blend-mode: multiply; }
+        
+        #kd-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; pointer-events: none; }
+        #kd-count { font-size: 150px; font-family: 'Impact', sans-serif; color: #fff; text-shadow: 5px 5px 0 #e84118, 0 0 30px #000; animation: pulseCount 1s infinite; margin-bottom: 50px; }
+        @keyframes pulseCount { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        #kd-recovery-container { width: 500px; height: 30px; background: #111; border: 4px solid #fff; border-radius: 15px; overflow: hidden; box-shadow: 0 0 20px #000; margin-bottom: 10px; }
+        #kd-recovery-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #e84118, #fbc531); transition: width 0.1s; }
+        #kd-instruction { font-size: 24px; color: #fbc531; font-weight: bold; text-shadow: 2px 2px #000; }
+
+        #game-container::before { content: ''; position: absolute; top:0; left:0; right:0; bottom:0; box-shadow: inset 0 0 100px rgba(0,0,0,0.9); pointer-events: none; z-index: 100; }
+        .floating-text { position: absolute; font-size: 24px; color: #fff; text-shadow: 2px 2px 0 #000; pointer-events: none; z-index: 6; font-style: italic; font-weight: bold; animation: floatUp 0.8s forwards; }
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-40px) scale(1.2); } }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="1024" height="768" oncontextmenu="return false;"></canvas>
+    <div id="damage-overlay"></div>
+    
+    <div id="kd-overlay" class="hidden">
+        <div id="kd-count">1</div>
+        <div id="kd-ui-player" class="hidden">
+            <div id="kd-recovery-container"><div id="kd-recovery-bar"></div></div>
+            <div id="kd-instruction">MASH SPACE OR CLICK TO GET UP!</div>
+        </div>
+    </div>
+
+    <div id="menu-main" class="ui-layer">
+        <h1>Pro Contender</h1>
+        <h2>Realistic Procedural Engine</h2>
+        <div style="background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 25px; width: 75%; font-size: 18px;">
+            <p><strong>WASD:</strong> Move &nbsp;|&nbsp; <strong>Q / E:</strong> Dodge Left / Right</p>
+            <p><strong>L-Click:</strong> Left Punch &nbsp;|&nbsp; <strong>R-Click:</strong> Right Punch &nbsp;|&nbsp; <strong>Both:</strong> Guard</p>
+            <p style="color: #fbc531; font-weight: bold; font-size: 16px;">Face highly detailed, procedurally generated opponents with unique body types. Back them into the ropes!</p>
+        </div>
+        <button onclick="showUI('menu-creator')">Start Career</button>
+    </div>
+
+    <div id="menu-creator" class="ui-layer hidden">
+        <h2>Fighter Registration</h2>
+        <div class="form-group"><label>Fighter Name</label><input type="text" id="playerName" value="Pierre-Luc"></div>
+        <div class="form-group"><label>Hometown</label><input type="text" id="playerHometown" value="Lévis, Quebec"></div>
+        <div class="form-group"><label>Glove Color</label><input type="color" id="playerColor" value="#e84118" style="padding:0; height:50px;"></div>
+        <button onclick="startCareer()" style="margin-top: 30px;">Enter Gym</button>
+    </div>
+
+    <div id="menu-hub" class="ui-layer hidden">
+        <h2>Training Camp</h2>
+        <h3 id="hub-name-rank" style="color: #dcdde1; font-weight: normal;">Name - Rank #100</h3>
+        <p id="hub-record" style="font-size: 24px; color: #4cd137; font-weight: bold; margin-top: 0; text-shadow: 0 0 10px rgba(76,209,55,0.5);">Record: 0-0 | Bank: $0</p>
+        
+        <div class="stats-grid">
+            <div class="stat-card"><h4>Power (<span id="stat-pow">10</span>)</h4><button id="btn-upg-pow" onclick="upgradeStat('power')">UPG</button></div>
+            <div class="stat-card"><h4>Speed (<span id="stat-spe">10</span>)</h4><button id="btn-upg-spe" onclick="upgradeStat('speed')">UPG</button></div>
+            <div class="stat-card"><h4>Defense (<span id="stat-def">10</span>)</h4><button id="btn-upg-def" onclick="upgradeStat('defense')">UPG</button></div>
+            <div class="stat-card"><h4>Stamina (<span id="stat-sta">10</span>)</h4><button id="btn-upg-sta" onclick="upgradeStat('stamina')">UPG</button></div>
+            <div class="stat-card"><h4>Accuracy (<span id="stat-acc">10</span>)</h4><button id="btn-upg-acc" onclick="upgradeStat('accuracy')">UPG</button></div>
+            <div class="stat-card"><h4>Reach (<span id="stat-rea">10</span>)</h4><button id="btn-upg-rea" onclick="upgradeStat('reach')">UPG</button></div>
+            <div class="stat-card" style="border-color:#fbc531;"><h4>Heart (<span id="stat-hea">10</span>)</h4><button id="btn-upg-hea" onclick="upgradeStat('heart')">UPG</button></div>
+        </div>
+
+        <div class="stat-card" style="width: 90%; max-width: 800px; background: linear-gradient(to right, rgba(194,54,22,0.2), rgba(0,0,0,0.8)); border-left: 5px solid var(--primary);">
+            <h3 style="margin: 0; font-size: 28px; text-align: left;">Next Fight: <span id="opp-name" style="color:#fff;">Unknown</span> <span style="color:var(--primary); font-size:20px;">(Rank #<span id="opp-rank">99</span>)</span></h3>
+            <p id="opp-desc" style="text-align: left; color: #ccc; margin: 5px 0 0 0; font-style: italic;">Scouting report...</p>
+            <button onclick="startFight()" style="font-size: 26px; padding: 15px 0; margin-top: 20px; width: 100%;">ENTER THE RING</button>
+        </div>
+    </div>
+
+    <div id="menu-postfight" class="ui-layer hidden">
+        <h1 id="pf-result" style="font-size: 80px;">RESULT</h1>
+        <p id="pf-details" style="font-size: 28px; text-align: center; max-width: 80%; line-height: 1.5;"></p>
+        <button onclick="showUI('menu-hub'); updateHubUI();" style="margin-top: 40px;">Return to Gym</button>
+    </div>
+
+    <div id="hud" class="hud hidden">
+        <div class="hud-side">
+            <div class="hud-name" id="hud-p-name">Player</div>
+            <div class="health-bar-container"><div id="hud-p-hp" class="health-bar"></div></div>
+            <div class="health-bar-container" style="height: 16px; border-color: #222;"><div id="hud-p-sta" class="stamina-bar"></div></div>
+        </div>
+        <div class="hud-side right">
+            <div class="hud-name" id="hud-o-name">Opponent</div>
+            <div class="hud-sub" id="hud-o-desc">Style / Build</div>
+            <div class="health-bar-container"><div id="hud-o-hp" class="health-bar" style="background: linear-gradient(270deg, #c23616, #e84118); box-shadow: 0 0 10px #c23616; float:right;"></div></div>
+            <div class="health-bar-container" style="height: 16px; border-color: #222;"><div id="hud-o-sta" class="stamina-bar" style="float:right;"></div></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    
+    let gameState = 'MENU'; 
+    let lastTime = 0;
+    let hitStopFrames = 0; 
+    let camShake = { x: 0, y: 0, rot: 0 };
+    
+    const mouse = { x: 512, y: 384, left: false, right: false };
+    const keys = { w: false, a: false, s: false, d: false, q: false, e: false };
+    const actions = { dodgeLeft: false, dodgeRight: false };
+
+    let particles = [];
+    let kd = { active: false, fighter: null, count: 0, timer: 0, playerProgress: 0, oppWakeCount: 0, oppWillWake: false };
+
+    let player = {
+        name: "Contender", color: "#e84118", money: 0, wins: 0, losses: 0, rank: 100,
+        stats: { power: 10, speed: 10, defense: 10, stamina: 10, accuracy: 10, reach: 10, heart: 10 },
+        hp: 100, maxHp: 100, sta: 100, maxSta: 100, isBlocking: false, exhausted: false, knockdowns: 0,
+        worldX: 0, worldZ: 0, dodgeState: 'none', dodgeTimer: 0, dodgeOffset: 0, tilt: 0,
+        arms: { left: { state: 'idle', progress: 0, targetX: 0, targetY: 0 }, right: { state: 'idle', progress: 0, targetX: 0, targetY: 0 } }
+    };
+
+    let opponent = {
+        name: "Boxer", rank: 99, color: "#0097e6", desc: "",
+        skin: { base: "#e1b182", dark: "#9c6d42", high: "#fcdbb8" },
+        build: { scaleX: 1, scaleY: 1, muscle: 1, belly: 0, jaw: 1 },
+        stats: { power: 10, speed: 10, defense: 10, stamina: 10, accuracy: 10, reach: 10, heart: 10, aggro: 0.5 },
+        hp: 100, maxHp: 100, sta: 100, maxSta: 100, knockdowns: 0,
+        state: 'idle', stateTimer: 0, worldX: 0, worldZ: 140, localX: 0, localY: 0,
+        head: { w: 85, h: 110 }, body: { w: 200, h: 220 }, currentAttack: null, dodgeDir: 0, damageFactor: 0
+    };
+
+    const RING_RADIUS = 300;
+    let view = { dist: 140, scale: 1.0, screenX: 512, screenY: 384, crossX: 512, crossY: 384 };
+
+    // --- UI FUNCTIONS ---
+    function showUI(id) {
+        document.querySelectorAll('.ui-layer').forEach(el => el.classList.add('hidden'));
+        if (id) document.getElementById(id).classList.remove('hidden');
+    }
+
+    function startCareer() {
+        player.name = document.getElementById('playerName').value || "Fighter";
+        player.color = document.getElementById('playerColor').value;
+        generateOpponent(player.rank - 1);
+        showUI('menu-hub'); 
+        updateHubUI();
+    }
+
+    const fnList = ["Iron", "Flash", "Slippery", "Mad", "King", "Wild", "Lethal", "Smokin'", "Sugar", "Venom", "Bones", "Tank"];
+    const lnList = ["Mike", "Ali", "Frazier", "Foreman", "Marciano", "Duran", "Hearns", "Tyson", "Balboa", "Creed", "Drago"];
+    const skinProfiles = [
+        { base: "#f1c27d", dark: "#b88a44", high: "#ffe5b4" }, { base: "#e0ac69", dark: "#a67332", high: "#fad3a2" },
+        { base: "#c68642", dark: "#7a4914", high: "#e6ae73" }, { base: "#8d5524", dark: "#4a2608", high: "#b57740" },
+        { base: "#3d2218", dark: "#1a0b06", high: "#663e2d" }
+    ];
+
+    function generateOpponent(targetRank) {
+        if(targetRank < 1) targetRank = 1;
+        let base = 10 + Math.floor((101 - targetRank) * 0.8);
+        
+        let buildClass = Math.random();
+        let build = { scaleX: 1, scaleY: 1, muscle: 1, belly: 0, jaw: 1 };
+        let styleDesc = "";
+
+        if (buildClass < 0.3) {
+            build.scaleX = 1.15 + Math.random()*0.2; build.scaleY = 1.0 + Math.random()*0.15;
+            build.belly = 0.4 + Math.random()*0.5; build.muscle = 0.7 + Math.random()*0.3; build.jaw = 1.2 + Math.random()*0.2;
+            styleDesc = "Super Heavyweight Brawler - Wide, tough, heavy hitter.";
+            base += 2; 
+        } else if (buildClass < 0.6) {
+            build.scaleX = 0.8 + Math.random()*0.15; build.scaleY = 0.85 + Math.random()*0.15;
+            build.belly = 0; build.muscle = 0.8 + Math.random()*0.4; build.jaw = 0.8 + Math.random()*0.2;
+            styleDesc = "Lean Swarmer - Fast, evasive, lower power.";
+        } else {
+            build.scaleX = 0.95 + Math.random()*0.15; build.scaleY = 1.0 + Math.random()*0.1;
+            build.belly = 0.0; build.muscle = 1.3 + Math.random()*0.5; build.jaw = 1.0 + Math.random()*0.1;
+            styleDesc = "Athletic Contender - Shredded, balanced fighter.";
+        }
+        
+        opponent = {
+            name: `${fnList[Math.floor(Math.random()*fnList.length)]} ${lnList[Math.floor(Math.random()*lnList.length)]}`, 
+            rank: targetRank, color: `hsl(${Math.random()*360}, 80%, 30%)`, desc: styleDesc,
+            skin: skinProfiles[Math.floor(Math.random() * skinProfiles.length)], build: build,
+            stats: {
+                power: base + Math.floor(Math.random() * 10) + (build.scaleX > 1 ? 5 : 0), 
+                speed: base + Math.floor(Math.random() * 10) - (build.scaleX > 1 ? 5 : -5),
+                defense: base + Math.floor(Math.random() * 10), stamina: base + Math.floor(Math.random() * 10),
+                accuracy: base + Math.floor(Math.random() * 10), reach: base + Math.floor(Math.random() * 10), heart: base + Math.floor(Math.random() * 10),
+                aggro: 0.3 + ((101-targetRank) * 0.006)
+            },
+            hp: 100 + (base * 3.5), maxHp: 100 + (base * 3.5), sta: 100 + (base * 2.5), maxSta: 100 + (base * 2.5), knockdowns: 0,
+            state: 'idle', stateTimer: 0, worldX: 0, worldZ: 140, localX: 0, localY: 0,
+            head: { w: 90 * build.jaw, h: 120 * build.scaleY }, body: { w: 220 * build.scaleX, h: 240 * build.scaleY }, 
+            currentAttack: null, dodgeDir: 0, damageFactor: 0
+        };
+    }
+
+    function updateHubUI() {
+        document.getElementById('hub-name-rank').innerText = `${player.name} - Rank #${player.rank}`;
+        document.getElementById('hub-record').innerText = `Record: ${player.wins}-${player.losses} | Bank: $${player.money}`;
+        ['power', 'speed', 'defense', 'stamina', 'accuracy', 'reach', 'heart'].forEach(stat => {
+            let cost = Math.floor(Math.pow(player.stats[stat], 1.3) * 5);
+            let statAbbr = stat.substring(0,3);
+            document.getElementById(`stat-${statAbbr}`).innerText = player.stats[stat];
+            let btn = document.getElementById(`btn-upg-${statAbbr}`);
+            btn.innerText = `UPG ($${cost})`;
+            btn.disabled = player.money < cost;
+        });
+        document.getElementById('opp-name').innerText = opponent.name;
+        document.getElementById('opp-rank').innerText = opponent.rank;
+        document.getElementById('opp-desc').innerText = opponent.desc;
+    }
+
+    function upgradeStat(stat) {
+        let cost = Math.floor(Math.pow(player.stats[stat], 1.3) * 5);
+        if (player.money >= cost) { 
+            player.money -= cost; 
+            player.stats[stat]++; 
+            updateHubUI(); 
+        }
+    }
+
+    // --- EFFECT SPAWNERS ---
+    function spawnText(text, x, y, color) {
+        let el = document.createElement('div');
+        el.className = 'floating-text'; 
+        el.innerText = text;
+        el.style.left = x + 'px'; 
+        el.style.top = y + 'px'; 
+        el.style.color = color;
+        document.getElementById('game-container').appendChild(el);
+        setTimeout(() => el.remove(), 800);
+    }
+    
+    function spawnParticles(x, y, type) {
+        let count = type === 'sweat' ? 12 : 30;
+        for(let i=0; i<count; i++) {
+            particles.push({
+                x: x, y: y, 
+                vx: (Math.random() - 0.5) * 25, 
+                vy: (Math.random() - 0.5) * 20 - 10,
+                life: 1.0, 
+                decay: Math.random() * 0.05 + 0.02, 
+                type: type
+            });
+        }
+    }
+
+    function flashDamage() { 
+        let overlay = document.getElementById('damage-overlay'); 
+        if(overlay) {
+            overlay.style.opacity = 1; 
+            setTimeout(() => overlay.style.opacity = 0, 150); 
+        }
+    }
+
+    function setCamShake(intensity, rot) {
+        camShake.x = (Math.random() - 0.5) * intensity;
+        camShake.y = (Math.random() - 0.5) * intensity;
+        camShake.rot = (Math.random() - 0.5) * rot;
+    }
+
+    // --- GAME FLOW LOGIC ---
+    function startFight() {
+        player.maxHp = 100 + (player.stats.defense * 4); player.maxSta = 100 + (player.stats.stamina * 3);
+        player.hp = player.maxHp; player.sta = player.maxSta; player.knockdowns = 0;
+        player.isBlocking = false; player.exhausted = false; player.worldX = 0; player.worldZ = -50;
+        player.dodgeState = 'none'; player.dodgeTimer = 0; player.dodgeOffset = 0; player.tilt = 0;
+        player.arms.left.state = 'idle'; player.arms.right.state = 'idle';
+        
+        opponent.hp = opponent.maxHp; opponent.sta = opponent.maxSta; opponent.damageFactor = 0; opponent.knockdowns = 0;
+        opponent.state = 'idle'; opponent.worldX = 0; opponent.worldZ = 120; opponent.localX = 0; opponent.localY = 0;
+        
+        particles = []; hitStopFrames = 0; kd.active = false;
+        
+        document.getElementById('kd-overlay').classList.add('hidden');
+        showUI('');
+        document.getElementById('hud').classList.remove('hidden');
+        document.getElementById('hud-p-name').innerText = player.name;
+        document.getElementById('hud-o-name').innerText = opponent.name;
+        document.getElementById('hud-o-desc').innerText = opponent.desc;
+        gameState = 'FIGHT';
+    }
+
+    function triggerKnockdown(fighterStr) {
+        gameState = 'KNOCKDOWN'; kd.active = true; kd.fighter = fighterStr; kd.count = 1; kd.timer = 0;
+        document.getElementById('kd-overlay').classList.remove('hidden');
+        document.getElementById('kd-count').innerText = "1";
+        
+        if (fighterStr === 'player') {
+            player.knockdowns++; kd.playerProgress = 0;
+            document.getElementById('kd-ui-player').classList.remove('hidden');
+            document.getElementById('kd-recovery-bar').style.width = "0%";
+            opponent.worldX = 150; opponent.worldZ = 150; 
+        } else {
+            opponent.knockdowns++; document.getElementById('kd-ui-player').classList.add('hidden');
+            let recoveryChance = 100 - (opponent.knockdowns * 30) + (opponent.stats.heart * 2);
+            kd.oppWillWake = (Math.random() * 100) < recoveryChance;
+            kd.oppWakeCount = Math.floor(Math.random() * 4) + 5; 
+            player.worldX = 0; player.worldZ = -50;
+        }
+    }
+
+    function endFight(playerWon) {
+        gameState = 'POSTFIGHT'; 
+        document.getElementById('hud').classList.add('hidden'); 
+        document.getElementById('kd-overlay').classList.add('hidden');
+        showUI('menu-postfight');
+        
+        let title = document.getElementById('pf-result'); let details = document.getElementById('pf-details');
+        if (playerWon) {
+            player.wins++;
+            let w = 250 + ((100 - opponent.rank) * 20); player.money += w;
+            let rankUp = opponent.rank === 1 ? 0 : Math.floor(Math.random() * 4) + 1;
+            if (opponent.rank === 1 && player.rank !== 1) rankUp = player.rank - 1; 
+            player.rank = Math.max(1, player.rank - rankUp);
+            title.innerText = "KNOCKOUT!"; title.style.color = "#4cd137"; title.style.textShadow = "0 0 20px #4cd137";
+            details.innerText = `You slept ${opponent.name}!\nEarned $${w}\nYour rank is now #${player.rank}`;
+            generateOpponent(player.rank - 1);
+        } else {
+            player.losses++; player.money += 75; 
+            title.innerText = "TKO..."; title.style.color = "#e84118"; title.style.textShadow = "0 0 20px #e84118";
+            details.innerText = `You didn't beat the count.\nRecovered $75 for medical bills.`;
+            generateOpponent(player.rank); 
+        }
+    }
+
+    // --- INPUT LISTENERS ---
+    window.addEventListener('keydown', e => {
+        let k = e.key.toLowerCase();
+        if (gameState === 'KNOCKDOWN' && kd.fighter === 'player' && k === ' ') { mashRecovery(); return; }
+        if (gameState !== 'FIGHT') return;
+        if (k === 'w') keys.w = true; if (k === 's') keys.s = true; if (k === 'a') keys.a = true; if (k === 'd') keys.d = true;
+        if (k === 'q' && !keys.q) { keys.q = true; actions.dodgeLeft = true; }
+        if (k === 'e' && !keys.e) { keys.e = true; actions.dodgeRight = true; }
+    });
+    window.addEventListener('keyup', e => {
+        let k = e.key.toLowerCase();
+        if (k === 'w') keys.w = false; if (k === 's') keys.s = false; if (k === 'a') keys.a = false; if (k === 'd') keys.d = false;
+        if (k === 'q') keys.q = false; if (k === 'e') keys.e = false;
+    });
+    
+    canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width); 
+        mouse.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+    });
+    canvas.addEventListener('mousedown', e => {
+        if (gameState === 'KNOCKDOWN' && kd.fighter === 'player') { mashRecovery(); return; }
+        if (gameState !== 'FIGHT') return;
+        if (e.button === 0) mouse.left = true; 
+        if (e.button === 2) mouse.right = true;
+        handlePunchInput();
+    });
+    canvas.addEventListener('mouseup', e => {
+        if (gameState !== 'FIGHT') return;
+        if (e.button === 0) mouse.left = false; 
+        if (e.button === 2) mouse.right = false;
+        handlePunchInput();
+    });
+
+    // --- CORE GAME MECHANICS ---
+    function handlePunchInput() {
+        if (mouse.left && mouse.right) { player.isBlocking = true; } 
+        else {
+            player.isBlocking = false;
+            if (player.exhausted || player.dodgeState !== 'none') return;
+            if (mouse.left && player.arms.left.state === 'idle') launchPunch('left');
+            if (mouse.right && player.arms.right.state === 'idle') launchPunch('right');
+        }
+    }
+
+    function mashRecovery() {
+        if (gameState !== 'KNOCKDOWN' || kd.fighter !== 'player') return;
+        kd.playerProgress += 8 + (player.stats.heart * 0.6);
+        
+        if (kd.playerProgress >= 100) {
+            kd.playerProgress = 100;
+            player.hp = player.maxHp * (0.15 + (player.stats.heart * 0.02));
+            player.sta = player.maxSta * 0.5;
+            document.getElementById('kd-overlay').classList.add('hidden');
+            opponent.worldX = 0; opponent.worldZ = 120; 
+            kd.active = false; 
+            gameState = 'FIGHT';
+        }
+        document.getElementById('kd-recovery-bar').style.width = `${kd.playerProgress}%`;
+    }
+
+    function launchPunch(side) {
+        let cost = 12 - (player.stats.stamina * 0.05);
+        if (player.sta < cost) { player.exhausted = true; setTimeout(() => { player.exhausted = false; }, 1500); return; }
+        player.sta -= cost;
+        
+        let spread = Math.max(0, 45 - (player.stats.accuracy * 1.5));
+        let arm = player.arms[side];
+        arm.state = 'punching'; 
+        arm.progress = 0;
+        arm.targetX = view.crossX + (Math.random() - 0.5) * spread * 2; 
+        arm.targetY = view.crossY + (Math.random() - 0.5) * spread * 2;
+
+        let dodgeChance = (opponent.stats.speed * 0.01) + (opponent.stats.defense * 0.005);
+        dodgeChance -= (opponent.build.scaleX - 1) * 0.2;
+
+        if (opponent.state === 'idle' && Math.random() < Math.min(dodgeChance, 0.8)) {
+            opponent.state = 'dodging';
+            if (view.crossY < view.screenY - 20) opponent.dodgeDir = (Math.random() < 0.3) ? 2 : (side === 'left' ? 1 : -1);
+            else opponent.dodgeDir = Math.random() > 0.5 ? 1 : -1; 
+            opponent.stateTimer = 350; 
+        }
+    }
+
+    function resolvePlayerHit(targetX, targetY) {
+        let maxReach = 70 + (player.stats.reach * 5.0); 
+        if (view.dist > maxReach) { 
+            player.sta = Math.max(0, player.sta - 5); 
+            spawnText("WHIFF!", targetX - 40, targetY - 40, "#95a5a6"); 
+            return; 
+        }
+        
+        if (opponent.state === 'hurt' || opponent.state === 'dodging') return;
+        
+        let hW = opponent.head.w * view.scale; let hH = opponent.head.h * view.scale;
+        let bW = opponent.body.w * view.scale; let bH = opponent.body.h * view.scale;
+
+        let ox = view.screenX + (opponent.localX * view.scale);
+        let headY = view.screenY + ((opponent.localY - 50 * opponent.build.scaleY) * view.scale);
+        let bodyY = view.screenY + ((opponent.localY + 70 * opponent.build.scaleY) * view.scale);
+
+        let headHit = (Math.abs(targetX - ox) < hW/2) && (Math.abs(targetY - headY) < hH/2);
+        let bodyHit = (Math.abs(targetX - ox) < bW/2) && (Math.abs(targetY - bodyY) < bH/2);
+
+        if (headHit || bodyHit) {
+            let dmg = (player.stats.power * 1.3) + (Math.random() * 5);
+            if (opponent.state === 'blocking') {
+                dmg *= (15 / (opponent.stats.defense + 15)); 
+                spawnParticles(targetX, targetY, 'sweat'); 
+                spawnText("BLOCKED", targetX - 50, targetY, "#f39c12");
+            } else {
+                if (headHit) { 
+                    dmg *= 1.5; spawnParticles(targetX, targetY, 'blood'); hitStopFrames = 4; setCamShake(15, 0.05); 
+                } else { 
+                    spawnParticles(targetX, targetY, 'sweat'); hitStopFrames = 2; setCamShake(8, 0.02); 
+                }
+                opponent.state = 'hurt'; 
+                opponent.stateTimer = 450; 
+                opponent.worldZ += 15 - (opponent.build.scaleX * 5); 
+            }
+            opponent.hp -= dmg;
+            opponent.damageFactor = 1 - Math.max(0, opponent.hp / opponent.maxHp);
+            
+            if (opponent.hp <= 0) { opponent.hp = 0; triggerKnockdown('opponent'); }
+        }
+    }
+
+    // --- ENGINE TICK UPDATES ---
+    function update(dt) {
+        if (gameState === 'KNOCKDOWN') { 
+            updateKnockdown(dt); 
+            updateParticles(); 
+            return; 
+        }
+        if (gameState !== 'FIGHT') return;
+        if (hitStopFrames > 0) { hitStopFrames--; return; } 
+
+        camShake.x *= 0.8; camShake.y *= 0.8; camShake.rot *= 0.8;
+
+        // Player Dodge state
+        let dodgeCost = 15;
+        if (player.dodgeTimer > 0) {
+            player.dodgeTimer -= dt; 
+            if (player.dodgeTimer <= 0) player.dodgeState = 'none';
+        } else if (!player.exhausted && !player.isBlocking) {
+            if (actions.dodgeLeft) {
+                if (player.sta >= dodgeCost) { player.dodgeState = 'left'; player.dodgeTimer = 350; player.sta -= dodgeCost; } 
+                else { player.exhausted = true; setTimeout(() => player.exhausted = false, 1500); }
+            } else if (actions.dodgeRight) {
+                if (player.sta >= dodgeCost) { player.dodgeState = 'right'; player.dodgeTimer = 350; player.sta -= dodgeCost; } 
+                else { player.exhausted = true; setTimeout(() => player.exhausted = false, 1500); }
+            }
+        }
+        actions.dodgeLeft = false; actions.dodgeRight = false; 
+
+        let targetOffset = 0; let targetTilt = 0;
+        if (player.dodgeState === 'left') { targetOffset = 180; targetTilt = -0.06; }
+        else if (player.dodgeState === 'right') { targetOffset = -180; targetTilt = 0.06; }
+        player.dodgeOffset += (targetOffset - player.dodgeOffset) * 0.25; 
+        player.tilt += (targetTilt - player.tilt) * 0.25;
+
+        // Player Movement
+        let moveSpeed = 160 * (dt/1000);
+        if (keys.w) player.worldZ += moveSpeed; 
+        if (keys.s) player.worldZ -= moveSpeed;
+        if (keys.a) player.worldX -= moveSpeed; 
+        if (keys.d) player.worldX += moveSpeed;
+
+        let pDist = Math.hypot(player.worldX, player.worldZ);
+        if (pDist > RING_RADIUS) { 
+            let a = Math.atan2(player.worldZ, player.worldX); 
+            player.worldX = Math.cos(a) * RING_RADIUS; 
+            player.worldZ = Math.sin(a) * RING_RADIUS; 
+        }
+
+        view.dist = Math.hypot(opponent.worldX - player.worldX, opponent.worldZ - player.worldZ);
+        if (view.dist < 50) {
+            let push = Math.atan2(opponent.worldZ - player.worldZ, opponent.worldX - player.worldX);
+            player.worldX = opponent.worldX - Math.cos(push)*50; 
+            player.worldZ = opponent.worldZ - Math.sin(push)*50; 
+            view.dist = 50;
+        }
+
+        view.scale = 130 / Math.max(50, view.dist);
+        view.screenX = 512 + ((opponent.worldX - player.worldX) * 2.5 * view.scale) - ((mouse.x - 512)*0.1) + player.dodgeOffset;
+        view.screenY = 384 + ((view.dist - 130) * 0.9) - ((mouse.y - 384)*0.1);
+
+        let sway = Math.max(0, 35 - player.stats.accuracy);
+        view.crossX = mouse.x + Math.sin(Date.now()*0.002) * sway; 
+        view.crossY = mouse.y + Math.cos(Date.now()*0.003) * sway;
+
+        if (!mouse.left && !mouse.right && player.arms.left.state === 'idle' && player.arms.right.state === 'idle') {
+            if (player.sta < player.maxSta) player.sta += (player.stats.stamina * 0.1) * (dt/16);
+        }
+
+        let pSpeedMod = player.exhausted ? 0.03 : (0.07 + (player.stats.speed * 0.0025));
+        ['left', 'right'].forEach(side => {
+            let arm = player.arms[side];
+            if (arm.state === 'punching') {
+                arm.progress += pSpeedMod * (dt/16);
+                if (arm.progress >= 1) { 
+                    arm.progress = 1; arm.state = 'retracting'; resolvePlayerHit(arm.targetX, arm.targetY); 
+                }
+            } else if (arm.state === 'retracting') {
+                arm.progress -= (pSpeedMod * 0.6) * (dt/16);
+                if (arm.progress <= 0) { arm.progress = 0; arm.state = 'idle'; }
+            }
+        });
+
+        updateOpponent(dt); 
+        updateParticles();
+
+        document.getElementById('hud-p-hp').style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
+        document.getElementById('hud-p-sta').style.width = `${Math.max(0, (player.sta / player.maxSta) * 100)}%`;
+        document.getElementById('hud-o-hp').style.width = `${Math.max(0, (opponent.hp / opponent.maxHp) * 100)}%`;
+        document.getElementById('hud-o-sta').style.width = `${Math.max(0, (opponent.sta / opponent.maxSta) * 100)}%`;
+    }
+
+    function updateKnockdown(dt) {
+        kd.timer += dt;
+        if (kd.timer >= 1000) {
+            kd.timer = 0; kd.count++;
+            let countEl = document.getElementById('kd-count'); countEl.innerText = kd.count;
+            countEl.style.animation = 'none'; countEl.offsetHeight; countEl.style.animation = 'pulseCount 1s infinite';
+            if (kd.count >= 10) { endFight(kd.fighter === 'opponent'); return; }
+        }
+
+        if (kd.fighter === 'player') {
+            let decay = (15 + (player.knockdowns * 8)) * (dt/1000);
+            kd.playerProgress = Math.max(0, kd.playerProgress - decay);
+            document.getElementById('kd-recovery-bar').style.width = `${kd.playerProgress}%`;
+        } else {
+            if (kd.oppWillWake && kd.count === kd.oppWakeCount) {
+                opponent.hp = opponent.maxHp * (0.15 + (opponent.stats.heart * 0.02)); 
+                opponent.sta = opponent.maxSta * 0.5;
+                opponent.state = 'idle'; opponent.localX = 0; opponent.localY = 0;
+                document.getElementById('kd-overlay').classList.add('hidden'); 
+                kd.active = false; gameState = 'FIGHT';
+            } else { 
+                opponent.localY += (200 - opponent.localY) * 0.05; 
+            }
+        }
+        
+        document.getElementById('hud-p-hp').style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
+        document.getElementById('hud-o-hp').style.width = `${Math.max(0, (opponent.hp / opponent.maxHp) * 100)}%`;
+    }
+
+    function updateParticles() {
+        for(let i=particles.length-1; i>=0; i--) {
+            let p = particles[i];
+            p.x += p.vx; 
+            p.y += p.vy; 
+            p.vy += 0.8; // Gravity
+            p.life -= p.decay;
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    function updateOpponent(dt) {
+        opponent.stateTimer -= dt;
+        
+        let oppMaxReach = 70 + (opponent.stats.reach * 5.0) * opponent.build.scaleX;
+        let optimalDist = oppMaxReach - 15;
+        let oSpeed = (90 - (opponent.build.scaleX - 1)*40) * (dt/1000); 
+        
+        if (opponent.state === 'idle' || opponent.state === 'blocking') {
+            let angle = Math.atan2(player.worldZ - opponent.worldZ, player.worldX - opponent.worldX);
+            if (view.dist > optimalDist + 15) { 
+                opponent.worldX += Math.cos(angle) * oSpeed; opponent.worldZ += Math.sin(angle) * oSpeed; 
+            } else if (view.dist < optimalDist - 15) { 
+                opponent.worldX -= Math.cos(angle) * oSpeed * 0.6; opponent.worldZ -= Math.sin(angle) * oSpeed * 0.6; 
+            } else { 
+                let strafe = Math.sin(Date.now() * 0.001) * oSpeed * 0.6; 
+                opponent.worldX += Math.cos(angle + Math.PI/2) * strafe; opponent.worldZ += Math.sin(angle + Math.PI/2) * strafe; 
+            }
+        }
+
+        let oppDistCenter = Math.hypot(opponent.worldX, opponent.worldZ);
+        if (oppDistCenter > RING_RADIUS) { 
+            let a = Math.atan2(opponent.worldZ, opponent.worldX); 
+            opponent.worldX = Math.cos(a) * RING_RADIUS; 
+            opponent.worldZ = Math.sin(a) * RING_RADIUS; 
+        }
+
+        let tLX = 0; let tLY = 0;
+        if (opponent.state === 'dodging') {
+            if (opponent.dodgeDir === 2) { tLY = 80; } else { tLX = opponent.dodgeDir * 120; tLY = 20; }
+        } else if (opponent.state === 'windup') {
+            tLX = opponent.currentAttack === 'left' ? -30 : 30; tLY = -15;
+        } else if (opponent.state === 'hurt') { 
+            tLY = -25; tLX = (Math.random()-0.5)*20; 
+        }
+        
+        opponent.localX += (tLX - opponent.localX) * 0.25; opponent.localY += (tLY - opponent.localY) * 0.25;
+
+        if (opponent.state !== 'punching' && opponent.sta < opponent.maxSta) opponent.sta += (opponent.stats.stamina * 0.08) * (dt/16);
+
+        if (opponent.stateTimer <= 0) {
+            if (['hurt', 'blocking', 'punching'].includes(opponent.state)) {
+                opponent.state = 'idle'; opponent.stateTimer = 400 + Math.random() * (1200 - opponent.stats.speed*25);
+            } else if (opponent.state === 'dodging') {
+                if (opponent.sta > 15 && view.dist <= oppMaxReach) {
+                    opponent.state = 'windup'; opponent.sta -= 12;
+                    opponent.currentAttack = opponent.dodgeDir === 1 ? 'right' : 'left'; 
+                    opponent.stateTimer = 220 + (opponent.build.scaleX*30); 
+                } else { opponent.state = 'idle'; opponent.stateTimer = 300; }
+            } else if (opponent.state === 'windup') {
+                opponent.state = 'punching'; opponent.stateTimer = 300; 
+                
+                if (view.dist <= oppMaxReach) {
+                    if (player.dodgeState !== 'none') {
+                        spawnText("SLIP!", 512 + (player.dodgeState === 'left' ? -100 : 100), 250, "#00a8ff");
+                    } else if (!player.isBlocking) {
+                        let dmg = (opponent.stats.power * 1.3) + (Math.random() * 5);
+                        player.hp -= dmg; hitStopFrames = 3; flashDamage(); setCamShake(20, 0.08);
+                        if (player.hp <= 0) { player.hp = 0; triggerKnockdown('player'); }
+                    } else { 
+                        player.hp -= (opponent.stats.power * 0.3); player.sta = Math.max(0, player.sta - 10); setCamShake(5, 0.01);
+                    }
+                } else { spawnText("WHIFF!", 512, 200, "#95a5a6"); }
+            } else if (opponent.state === 'idle') {
+                if (Math.random() < opponent.stats.aggro && opponent.sta > 20 && view.dist <= oppMaxReach + 10) {
+                    opponent.state = 'windup'; opponent.sta -= 15; opponent.currentAttack = Math.random() > 0.5 ? 'left' : 'right';
+                    opponent.stateTimer = Math.max(200, 650 - (opponent.stats.speed * 15)) + (opponent.build.scaleX*50); 
+                } else if (Math.random() < opponent.stats.aggro + 0.3) {
+                    opponent.state = 'blocking'; opponent.stateTimer = 600 + Math.random() * 800;
+                } else { opponent.stateTimer = 300; }
+            }
+        }
+    }
+
+    // --- DRAW ENGINE ---
+    function draw() {
+        if (gameState !== 'FIGHT' && gameState !== 'KNOCKDOWN') return;
+
+        ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        if (gameState === 'KNOCKDOWN' && kd.fighter === 'player') {
+            let grd = ctx.createRadialGradient(512, 384, 100, 512, 384, 800);
+            grd.addColorStop(0, 'rgba(0,0,0,0)'); grd.addColorStop(1, 'rgba(232,65,24,0.4)');
+            ctx.fillStyle = grd; ctx.fillRect(0,0, 1024, 768);
+        }
+        
+        ctx.save();
+        ctx.translate(512 + camShake.x, 384 + camShake.y); 
+        ctx.rotate(player.tilt + camShake.rot); 
+        ctx.translate(-512, -384);
+
+        drawVolumetricLights(); 
+        drawRing3D();
+        
+        ctx.save();
+        ctx.translate(view.screenX, view.screenY); 
+        ctx.scale(view.scale, view.scale);
+        
+        if (kd.active && kd.fighter === 'opponent') {
+            ctx.translate(0, opponent.localY); 
+            ctx.rotate(Math.PI / 2.2); 
+            ctx.translate(0, -opponent.localY);
+        }
+        
+        drawOpponentProcedural();
+        ctx.restore();
+
+        // Safely call drawing functions
+        drawParticles();
+        
+        if (!kd.active || kd.fighter === 'opponent') { 
+            drawPlayerDetailed(); 
+        }
+        
+        ctx.restore(); 
+
+        if (gameState === 'FIGHT') drawCrosshair();
+    }
+
+    function drawVolumetricLights() {
+        let cx = 512 - ((mouse.x - 512)*0.05); let cy = 200 - ((mouse.y - 384)*0.05);
+        let grd = ctx.createRadialGradient(cx, cy, 0, cx, cy+400, 600);
+        grd.addColorStop(0, 'rgba(255,255,255,0.15)'); grd.addColorStop(0.5, 'rgba(255,255,255,0.02)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grd; ctx.beginPath(); ctx.moveTo(cx-150, 0); ctx.lineTo(cx+150, 0); ctx.lineTo(1024, 768); ctx.lineTo(0, 768); ctx.fill();
+    }
+
+    function drawRing3D() {
+        let camX = player.worldX * -1.0; let camZ = player.worldZ * -1.0;
+        let bgGrd = ctx.createLinearGradient(0, 450, 0, 768);
+        bgGrd.addColorStop(0, '#11131a'); bgGrd.addColorStop(1, '#2c3e50');
+        ctx.fillStyle = bgGrd; ctx.beginPath(); ctx.moveTo(0, 420); ctx.lineTo(1024, 420); ctx.lineTo(1024, 768); ctx.lineTo(0, 768); ctx.fill();
+        
+        ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 3;
+        let offX = camX % 60;
+        for(let i=-20; i<40; i++) {
+            let startX = 512 + (offX + (i * 60) - 512) * 0.1; let endX = 512 + (offX + (i * 60) - 512) * 3.0;
+            ctx.beginPath(); ctx.moveTo(startX, 420); ctx.lineTo(endX, 768); ctx.stroke();
+        }
+
+        for(let i=0; i<4; i++) {
+            let y = 250 + (i * 45) + (camZ * 0.1); let thickness = 4 + (i * 1.5);
+            ctx.strokeStyle = '#8c160b'; ctx.lineWidth = thickness;
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.quadraticCurveTo(512, y+15, 1024, y); ctx.stroke();
+            ctx.strokeStyle = '#ff473a'; ctx.lineWidth = thickness * 0.4;
+            ctx.beginPath(); ctx.moveTo(0, y-1); ctx.quadraticCurveTo(512, y+14, 1024, y-1); ctx.stroke();
+        }
+    }
+
+    function drawOpponentProcedural() {
+        let ox = opponent.localX; let oy = opponent.localY;
+        let b = opponent.build; let dmg = opponent.damageFactor; 
+
+        if (opponent.state === 'hurt') ctx.globalCompositeOperation = "color-dodge";
+
+        let skinBase = mixColor(opponent.skin.base, '#8c1a1a', dmg * 0.5); 
+        let skinDark = mixColor(opponent.skin.dark, '#3a0000', dmg * 0.6);
+        let skinHigh = opponent.skin.high;
+        
+        let sW = 95 * b.scaleX; 
+        let wW = (65 * b.scaleX) + (50 * b.belly); 
+        let bH = 190 * b.scaleY; 
+        
+        ctx.shadowColor = 'rgba(0, 150, 255, 0.4)'; ctx.shadowBlur = 20;
+
+        let bodyGrd = ctx.createRadialGradient(ox, oy+80, 20, ox, oy+100, 140);
+        bodyGrd.addColorStop(0, skinHigh); bodyGrd.addColorStop(0.3, skinBase); bodyGrd.addColorStop(1, skinDark);
+        ctx.fillStyle = bodyGrd;
+        
+        ctx.beginPath(); ctx.moveTo(ox - sW, oy + 10); ctx.quadraticCurveTo(ox, oy + 45, ox + sW, oy + 10); 
+        ctx.bezierCurveTo(ox + sW + 10, oy + 60, ox + wW + 10, oy + bH - 40, ox + wW, oy + bH); 
+        ctx.lineTo(ox - wW, oy + bH); 
+        ctx.bezierCurveTo(ox - wW - 10, oy + bH - 40, ox - sW - 10, oy + 60, ox - sW, oy + 10); ctx.fill();
+        ctx.shadowBlur = 0; 
+
+        let muscAlpha = Math.max(0, b.muscle - (b.belly * 1.5)); 
+        ctx.strokeStyle = `rgba(0,0,0,${0.4 * muscAlpha})`; ctx.lineWidth = 4 * b.muscle;
+        
+        let pecY = oy + 45 + (b.belly * 15); 
+        ctx.beginPath(); ctx.moveTo(ox - (sW*0.9), pecY); 
+        ctx.bezierCurveTo(ox - (sW*0.4), pecY + 40, ox, pecY + 40, ox, pecY + 25); 
+        ctx.bezierCurveTo(ox, pecY + 40, ox + (sW*0.4), pecY + 40, ox + (sW*0.9), pecY); ctx.stroke();
+
+        if (muscAlpha > 0.1) {
+            ctx.lineWidth = 2.5 * muscAlpha;
+            ctx.beginPath(); ctx.moveTo(ox, pecY + 25); ctx.lineTo(ox, pecY + 120); ctx.stroke(); 
+            for(let i=0; i<3; i++) {
+                let abY = pecY + 50 + (i*25);
+                ctx.beginPath(); ctx.moveTo(ox-25*b.scaleX, abY); ctx.quadraticCurveTo(ox, abY+10, ox+25*b.scaleX, abY); ctx.stroke();
+            }
+        }
+
+        let trY = oy + bH - 20; let tColor = opponent.color; let tDark = mixColor(tColor, '#000', 0.6);
+        let trGrd = ctx.createLinearGradient(ox - wW, trY, ox + wW, trY);
+        trGrd.addColorStop(0, tDark); trGrd.addColorStop(0.5, tColor); trGrd.addColorStop(1, tDark);
+        
+        ctx.fillStyle = trGrd; ctx.beginPath(); 
+        ctx.moveTo(ox - wW - 5, trY); ctx.quadraticCurveTo(ox, trY + 20, ox + wW + 5, trY);
+        ctx.lineTo(ox + wW + 20, trY + 80); ctx.lineTo(ox - wW - 20, trY + 80); ctx.fill();
+        
+        ctx.fillStyle = '#111'; ctx.fillRect(ox - wW - 10, trY - 10, (wW*2) + 20, 25);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(ox - wW - 10, trY - 10, (wW*2) + 20, 25);
+
+        let headRot = opponent.state === 'hurt' ? -0.2 : (opponent.state === 'windup' ? 0.1 : 0);
+        ctx.save(); ctx.translate(ox, oy - 40 * b.scaleY); ctx.rotate(headRot);
+
+        let headGrd = ctx.createRadialGradient(0, -10, 10, 0, 10, 60);
+        headGrd.addColorStop(0, skinHigh); headGrd.addColorStop(0.5, skinBase); headGrd.addColorStop(1, skinDark);
+        ctx.fillStyle = headGrd;
+        
+        let hw = 35 * b.jaw; let hh = 50 * b.scaleY; 
+        ctx.beginPath(); ctx.moveTo(-hw, -hh); ctx.quadraticCurveTo(0, -hh - 15, hw, -hh); 
+        ctx.bezierCurveTo(hw + 5, -10, hw - 5, 25, hw * 0.6, 35); 
+        ctx.quadraticCurveTo(0, 45, -hw * 0.6, 35); 
+        ctx.bezierCurveTo(-hw + 5, 25, -hw - 5, -10, -hw, -hh); ctx.fill();
+
+        if (dmg > 0.3) { ctx.fillStyle = 'rgba(75, 0, 130, 0.4)'; ctx.beginPath(); ctx.ellipse(-20, -15, 15, 10, 0.2, 0, Math.PI*2); ctx.fill(); }
+        if (dmg > 0.7) { ctx.fillStyle = 'rgba(139, 0, 0, 0.5)'; ctx.beginPath(); ctx.ellipse(15, -25, 10, 5, -0.2, 0, Math.PI*2); ctx.fill(); }
+
+        ctx.fillStyle = '#111'; let eyeY = -15 * b.scaleY; let ew = 25 * b.jaw;
+        if (opponent.state === 'windup') { 
+            ctx.beginPath(); ctx.moveTo(-ew, eyeY-8); ctx.lineTo(-10, eyeY+2); ctx.lineTo(-ew, eyeY+2); ctx.fill(); 
+            ctx.beginPath(); ctx.moveTo(ew, eyeY-8); ctx.lineTo(10, eyeY+2); ctx.lineTo(ew, eyeY+2); ctx.fill();   
+            ctx.fillStyle = '#eee'; ctx.fillRect(-10, 15, 20, 5); ctx.strokeStyle='#000'; ctx.strokeRect(-10, 15, 20, 5);
+        } else if (opponent.state === 'hurt' || (kd.active && kd.fighter==='opponent')) { 
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-15, eyeY, 8, 0, Math.PI*2); ctx.arc(15, eyeY, 8, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(-15, eyeY, 3, 0, Math.PI*2); ctx.arc(15, eyeY, 3, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#333'; ctx.beginPath(); ctx.ellipse(0, 20, 12, 18, 0, 0, Math.PI*2); ctx.fill(); 
+        } else { 
+            ctx.beginPath(); ctx.arc(-15, eyeY, 4, 0, Math.PI*2); ctx.arc(15, eyeY, 4, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#111'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(-22, eyeY-5); ctx.lineTo(-10, eyeY-3); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(22, eyeY-5); ctx.lineTo(10, eyeY-3); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-10, 20); ctx.lineTo(10, 20); ctx.stroke(); 
+        }
+        ctx.restore(); 
+
+        let lx, ly, rx, ry;
+        if (opponent.state === 'blocking') {
+            lx = ox - 35*b.scaleX; ly = oy - 20; rx = ox + 35*b.scaleX; ry = oy - 20;
+        } else if (opponent.state === 'windup' || opponent.state === 'punching') {
+            let p = opponent.state === 'punching' ? 1 : 0.2; let ease = 1 - Math.pow(1 - p, 3); 
+            if (opponent.currentAttack === 'left') {
+                lx = ox - 60 + (ease*70); ly = oy + 40 + (ease*180); rx = ox + 45*b.scaleX; ry = oy + 60; 
+            } else {
+                lx = ox - 45*b.scaleX; ly = oy + 60; rx = ox + 60 - (ease*70); ry = oy + 40 + (ease*180);
+            }
+        } else {
+            let bounce = kd.active ? 0 : Math.sin(Date.now()*0.005)*8;
+            lx = ox - 55*b.scaleX; ly = oy + 50 + bounce; rx = ox + 55*b.scaleX; ry = oy + 50 - bounce;
+            if(kd.active && kd.fighter === 'opponent') { lx -= 20; rx += 20; } 
+        }
+
+        let rL = opponent.state==='punching' && opponent.currentAttack==='left' ? 65 : 45;
+        let rR = opponent.state==='punching' && opponent.currentAttack==='right' ? 65 : 45;
+
+        ctx.strokeStyle = skinDark; ctx.lineWidth = 35 * b.muscle; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(ox - sW + 5, oy + 20); ctx.lineTo(lx, ly-10); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + sW - 5, oy + 20); ctx.lineTo(rx, ry-10); ctx.stroke();
+
+        drawDetailedGlove(lx, ly, rL, opponent.color);
+        drawDetailedGlove(rx, ry, rR, opponent.color);
+
+        ctx.globalCompositeOperation = "source-over";
+    }
+
+    function drawPlayerDetailed() {
+        if (player.isBlocking) { drawDetailedGlove(350, 500, 140, player.color); drawDetailedGlove(674, 500, 140, player.color); return; }
+
+        ['left', 'right'].forEach(side => {
+            let arm = player.arms[side];
+            let baseX = side === 'left' ? 250 : 774; let baseY = 750;
+            let ease = arm.state === 'punching' ? 1 - Math.pow(1 - arm.progress, 4) : arm.progress; 
+            let cx = baseX + (arm.targetX - baseX) * ease; let cy = baseY + (arm.targetY - baseY) * ease;
+            let radius = 120 - (ease * 65); 
+
+            if (arm.progress > 0) {
+                ctx.strokeStyle = player.color; ctx.globalAlpha = 0.25; ctx.lineWidth = radius * 1.6; ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.lineTo(cx, cy); ctx.stroke();
+                ctx.strokeStyle = '#fff'; ctx.globalAlpha = 0.5; ctx.lineWidth = radius * 0.4;
+                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.lineTo(cx, cy); ctx.stroke(); ctx.globalAlpha = 1.0;
+            }
+
+            if (arm.state === 'idle') { cx += Math.sin(Date.now()*0.003 + (side==='left'?0:Math.PI))*12; cy += Math.cos(Date.now()*0.004)*12; }
+            cx -= player.dodgeOffset * 0.4; cy += Math.abs(player.dodgeOffset) * 0.1;
+
+            drawDetailedGlove(cx, cy, radius, player.color);
+        });
+    }
+
+    function drawDetailedGlove(x, y, r, color) {
+        let darkColor = mixColor(color, '#000', 0.6); let lightColor = mixColor(color, '#fff', 0.4);
+
+        let grd = ctx.createRadialGradient(x - r*0.2, y - r*0.2, r*0.1, x, y, r);
+        grd.addColorStop(0, '#fff'); grd.addColorStop(0.15, lightColor); grd.addColorStop(0.5, color); grd.addColorStop(1, darkColor);
+
+        ctx.fillStyle = grd; ctx.beginPath(); ctx.ellipse(x, y, r, r*1.2, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x - r*0.5, y + r*0.3, r*0.4, r*0.6, Math.PI/6, 0, Math.PI*2); ctx.fill();
+
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.fillRect(x - r*0.6, y + r*0.9, r*1.2, r*0.4);
+        
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = r * 0.08; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(x - r*0.3, y - r*0.2); ctx.quadraticCurveTo(x, y + r*0.6, x + r*0.5, y + r*0.2); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = r * 0.05;
+        ctx.beginPath(); ctx.ellipse(x, y - r*0.7, r*0.6, r*0.2, -0.2, 0, Math.PI); ctx.stroke();
+    }
+
+    function drawCrosshair() {
+        if (player.isBlocking) return;
+        ctx.strokeStyle = player.exhausted ? '#e84118' : 'rgba(255, 255, 255, 0.7)'; ctx.lineWidth = 3;
+        let cx = view.crossX; let cy = view.crossY;
+        
+        ctx.beginPath(); ctx.moveTo(cx - 20, cy); ctx.lineTo(cx + 20, cy); ctx.moveTo(cx, cy - 20); ctx.lineTo(cx, cy + 20); ctx.stroke();
+        ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI*2); ctx.stroke();
+        
+        let spread = Math.max(0, 45 - (player.stats.accuracy * 1.5));
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; ctx.beginPath(); ctx.arc(cx, cy, spread, 0, Math.PI*2); ctx.stroke();
+
+        if(player.exhausted) { ctx.fillStyle = '#e84118'; ctx.font = '900 20px Impact'; ctx.textAlign = 'center'; ctx.fillText("EXHAUSTED", cx, cy - 30); }
+    }
+
+    // Safely declared drawParticles function
+    function drawParticles() {
+        particles.forEach(p => {
+            if (p.type === 'sweat') {
+                ctx.fillStyle = `rgba(200, 230, 255, ${p.life})`;
+                ctx.beginPath(); ctx.arc(p.x, p.y, 2 + p.life*3, 0, Math.PI*2); ctx.fill();
+            } else if (p.type === 'blood') {
+                ctx.fillStyle = `rgba(180, 0, 0, ${p.life})`;
+                ctx.beginPath(); ctx.arc(p.x, p.y, 3 + p.life*4, 0, Math.PI*2); ctx.fill();
+            }
+        });
+    }
+
+    function mixColor(hex1, hex2, weight) {
+        if(weight <= 0) return hex1; if(weight >= 1) return hex2;
+        let c1 = hexToRgb(hex1); let c2 = hexToRgb(hex2);
+        return `rgb(${Math.round(c1.r*(1-weight)+c2.r*weight)},${Math.round(c1.g*(1-weight)+c2.g*weight)},${Math.round(c1.b*(1-weight)+c2.b*weight)})`;
+    }
+    
+    function hexToRgb(hex) {
+        let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : {r:0,g:0,b:0};
+    }
+
+    function loop(timestamp) {
+        let dt = timestamp - lastTime; lastTime = timestamp; if (dt > 100) dt = 16;
+        update(dt); draw(); requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+</script>
+</body>
+</html>
