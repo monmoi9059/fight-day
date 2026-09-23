@@ -97,6 +97,7 @@
         <h2>Realistic Procedural Engine</h2>
         <div style="background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 25px; width: 75%; font-size: 18px;">
             <p><strong>WASD:</strong> Move &nbsp;|&nbsp; <strong>Q / E:</strong> Dodge Left / Right</p>
+            <p><strong>Shift + WASD:</strong> Body Lean (Slip Punches)</p>
             <p><strong>L-Click:</strong> Left Punch &nbsp;|&nbsp; <strong>R-Click:</strong> Right Punch &nbsp;|&nbsp; <strong>Both:</strong> Guard</p>
             <p style="color: #fbc531; font-weight: bold; font-size: 16px;">Face highly detailed, procedurally generated opponents with unique body types. Back them into the ropes!</p>
         </div>
@@ -164,7 +165,7 @@
     let camShake = { x: 0, y: 0, rot: 0 };
     
     const mouse = { x: 512, y: 384, left: false, right: false };
-    const keys = { w: false, a: false, s: false, d: false, q: false, e: false };
+    const keys = { w: false, a: false, s: false, d: false, q: false, e: false, shift: false };
     const actions = { dodgeLeft: false, dodgeRight: false };
 
     let particles = [];
@@ -174,14 +175,14 @@
         name: "Contender", color: "#e84118", money: 0, wins: 0, losses: 0, rank: 100,
         stats: { power: 10, speed: 10, defense: 10, stamina: 10, accuracy: 10, reach: 10, heart: 10 },
         hp: 100, maxHp: 100, sta: 100, maxSta: 100, isBlocking: false, exhausted: false, knockdowns: 0,
-        worldX: 0, worldZ: 0, dodgeState: 'none', dodgeTimer: 0, dodgeOffset: 0, tilt: 0,
+        worldX: 0, worldZ: 0, dodgeState: 'none', dodgeTimer: 0, dodgeOffset: 0, tilt: 0, counterWindow: 0, leanX: 0, leanY: 0,
         arms: { left: { state: 'idle', progress: 0, targetX: 0, targetY: 0 }, right: { state: 'idle', progress: 0, targetX: 0, targetY: 0 } }
     };
 
     let opponent = {
         name: "Boxer", rank: 99, color: "#0097e6", desc: "",
         skin: { base: "#e1b182", dark: "#9c6d42", high: "#fcdbb8" },
-        build: { scaleX: 1, scaleY: 1, muscle: 1, belly: 0, jaw: 1 },
+                build: { scaleX: 1, scaleY: 1, muscle: 1, belly: 0, jaw: 1, hair: 'buzzcut', hairColor: '#111' },
         stats: { power: 10, speed: 10, defense: 10, stamina: 10, accuracy: 10, reach: 10, heart: 10, aggro: 0.5 },
         hp: 100, maxHp: 100, sta: 100, maxSta: 100, knockdowns: 0,
         state: 'idle', stateTimer: 0, worldX: 0, worldZ: 140, localX: 0, localY: 0,
@@ -218,7 +219,11 @@
         let base = 10 + Math.floor((101 - targetRank) * 0.8);
         
         let buildClass = Math.random();
-        let build = { scaleX: 1, scaleY: 1, muscle: 1, belly: 0, jaw: 1 };
+                let build = {
+            scaleX: 1, scaleY: 1, muscle: 1, belly: 0, jaw: 1,
+            hair: ['bald', 'buzzcut', 'mohawk', 'afro', 'fade'][Math.floor(Math.random() * 5)],
+            hairColor: ['#111', '#4a2511', '#e8b831', '#8b2e16'][Math.floor(Math.random() * 4)]
+        };
         let styleDesc = "";
 
         if (buildClass < 0.3) {
@@ -389,12 +394,14 @@
         let k = e.key.toLowerCase();
         if (gameState === 'KNOCKDOWN' && kd.fighter === 'player' && k === ' ') { mashRecovery(); return; }
         if (gameState !== 'FIGHT') return;
+        if (k === 'shift') keys.shift = true;
         if (k === 'w') keys.w = true; if (k === 's') keys.s = true; if (k === 'a') keys.a = true; if (k === 'd') keys.d = true;
         if (k === 'q' && !keys.q) { keys.q = true; actions.dodgeLeft = true; }
         if (k === 'e' && !keys.e) { keys.e = true; actions.dodgeRight = true; }
     });
     window.addEventListener('keyup', e => {
         let k = e.key.toLowerCase();
+        if (k === 'shift') keys.shift = false;
         if (k === 'w') keys.w = false; if (k === 's') keys.s = false; if (k === 'a') keys.a = false; if (k === 'd') keys.d = false;
         if (k === 'q') keys.q = false; if (k === 'e') keys.e = false;
     });
@@ -490,15 +497,25 @@
 
         if (headHit || bodyHit) {
             let dmg = (player.stats.power * 1.3) + (Math.random() * 5);
+                let isCounter = player.counterWindow > 0 && opponent.state !== 'blocking';
+                if (isCounter) {
+                    dmg *= 2.5;
+                    spawnText("COUNTER PUNCH!", targetX, targetY - 40, "#fbc531");
+                }
+
             if (opponent.state === 'blocking') {
                 dmg *= (15 / (opponent.stats.defense + 15)); 
                 spawnParticles(targetX, targetY, 'sweat'); 
                 spawnText("BLOCKED", targetX - 50, targetY, "#f39c12");
             } else {
                 if (headHit) { 
-                    dmg *= 1.5; spawnParticles(targetX, targetY, 'blood'); hitStopFrames = 4; setCamShake(15, 0.05); 
+                    dmg *= 1.5; spawnParticles(targetX, targetY, 'blood'); hitStopFrames = 4; setCamShake(15, 0.05);
+                        if (isCounter) { spawnParticles(targetX, targetY, 'blood'); spawnParticles(targetX, targetY, 'blood'); hitStopFrames = 8; setCamShake(30, 0.1); }
+
                 } else { 
-                    spawnParticles(targetX, targetY, 'sweat'); hitStopFrames = 2; setCamShake(8, 0.02); 
+                    spawnParticles(targetX, targetY, 'sweat'); hitStopFrames = 2; setCamShake(8, 0.02);
+                        if (isCounter) { hitStopFrames = 5; setCamShake(20, 0.05); }
+
                 }
                 opponent.state = 'hurt'; 
                 opponent.stateTimer = 450; 
@@ -519,7 +536,9 @@
             return; 
         }
         if (gameState !== 'FIGHT') return;
-        if (hitStopFrames > 0) { hitStopFrames--; return; } 
+        if (hitStopFrames > 0) { hitStopFrames--; return; }
+    if (player.counterWindow > 0) { player.counterWindow -= dt; }
+
 
         camShake.x *= 0.8; camShake.y *= 0.8; camShake.rot *= 0.8;
 
@@ -545,12 +564,26 @@
         player.dodgeOffset += (targetOffset - player.dodgeOffset) * 0.25; 
         player.tilt += (targetTilt - player.tilt) * 0.25;
 
-        // Player Movement
+        // Player Movement and Body Leaning
         let moveSpeed = 160 * (dt/1000);
-        if (keys.w) player.worldZ += moveSpeed; 
-        if (keys.s) player.worldZ -= moveSpeed;
-        if (keys.a) player.worldX -= moveSpeed; 
-        if (keys.d) player.worldX += moveSpeed;
+        let targetLeanX = 0;
+        let targetLeanY = 0;
+
+        if (keys.shift) {
+            if (keys.w) targetLeanY = -120; // Lean forward
+            if (keys.s) targetLeanY = 120;  // Lean back
+            if (keys.a) targetLeanX = -150; // Lean left
+            if (keys.d) targetLeanX = 150;  // Lean right
+        } else {
+            if (keys.w) player.worldZ += moveSpeed;
+            if (keys.s) player.worldZ -= moveSpeed;
+            if (keys.a) player.worldX -= moveSpeed;
+            if (keys.d) player.worldX += moveSpeed;
+        }
+
+        player.leanX += (targetLeanX - player.leanX) * 0.15;
+        player.leanY += (targetLeanY - player.leanY) * 0.15;
+
 
         let pDist = Math.hypot(player.worldX, player.worldZ);
         if (pDist > RING_RADIUS) { 
@@ -569,7 +602,11 @@
 
         view.scale = 130 / Math.max(50, view.dist);
         view.screenX = 512 + ((opponent.worldX - player.worldX) * 2.5 * view.scale) - ((mouse.x - 512)*0.1) + player.dodgeOffset;
+        view.screenX -= player.leanX;
+
         view.screenY = 384 + ((view.dist - 130) * 0.9) - ((mouse.y - 384)*0.1);
+        view.screenY += player.leanY;
+
 
         let sway = Math.max(0, 35 - player.stats.accuracy);
         view.crossX = mouse.x + Math.sin(Date.now()*0.002) * sway; 
@@ -694,8 +731,9 @@
                 opponent.state = 'punching'; opponent.stateTimer = 300; 
                 
                 if (view.dist <= oppMaxReach) {
-                    if (player.dodgeState !== 'none') {
-                        spawnText("SLIP!", 512 + (player.dodgeState === 'left' ? -100 : 100), 250, "#00a8ff");
+                    if (player.dodgeState !== 'none' || Math.abs(player.leanX) > 100 || player.leanY > 80) {
+                        spawnText("SLIP!", 512 + (player.leanX < 0 || player.dodgeState === 'left' ? -100 : 100), 250, "#00a8ff");
+                        player.counterWindow = 600;
                     } else if (!player.isBlocking) {
                         let dmg = (opponent.stats.power * 1.3) + (Math.random() * 5);
                         player.hp -= dmg; hitStopFrames = 3; flashDamage(); setCamShake(20, 0.08);
@@ -703,7 +741,12 @@
                     } else { 
                         player.hp -= (opponent.stats.power * 0.3); player.sta = Math.max(0, player.sta - 10); setCamShake(5, 0.01);
                     }
-                } else { spawnText("WHIFF!", 512, 200, "#95a5a6"); }
+                } else {
+                        spawnText("WHIFF!", 512, 200, "#95a5a6");
+                        if (player.dodgeState !== 'none' || Math.abs(player.leanX) > 100 || player.leanY > 80) {
+                            player.counterWindow = 600;
+                        }
+                    }
             } else if (opponent.state === 'idle') {
                 if (Math.random() < opponent.stats.aggro && opponent.sta > 20 && view.dist <= oppMaxReach + 10) {
                     opponent.state = 'windup'; opponent.sta -= 15; opponent.currentAttack = Math.random() > 0.5 ? 'left' : 'right';
@@ -855,6 +898,20 @@
         ctx.bezierCurveTo(hw + 5, -10, hw - 5, 25, hw * 0.6, 35); 
         ctx.quadraticCurveTo(0, 45, -hw * 0.6, 35); 
         ctx.bezierCurveTo(-hw + 5, 25, -hw - 5, -10, -hw, -hh); ctx.fill();
+
+        // Draw Hair
+        ctx.fillStyle = b.hairColor || '#111';
+        if (b.hair === 'buzzcut') {
+            ctx.beginPath(); ctx.ellipse(0, -hh - 12, hw + 2, 8, 0, 0, Math.PI*2); ctx.fill();
+        } else if (b.hair === 'mohawk') {
+            ctx.beginPath(); ctx.moveTo(-15, -hh - 10); ctx.lineTo(-10, -hh - 40); ctx.lineTo(0, -hh - 50); ctx.lineTo(10, -hh - 40); ctx.lineTo(15, -hh - 10); ctx.fill();
+        } else if (b.hair === 'afro') {
+            ctx.beginPath(); ctx.arc(-20, -hh - 15, 20, 0, Math.PI*2); ctx.arc(0, -hh - 25, 25, 0, Math.PI*2); ctx.arc(20, -hh - 15, 20, 0, Math.PI*2); ctx.fill();
+        } else if (b.hair === 'fade') {
+            ctx.beginPath(); ctx.ellipse(0, -hh - 15, hw - 5, 12, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillRect(-hw, -hh, hw*2, 15);
+        }
+
 
         if (dmg > 0.3) { ctx.fillStyle = 'rgba(75, 0, 130, 0.4)'; ctx.beginPath(); ctx.ellipse(-20, -15, 15, 10, 0.2, 0, Math.PI*2); ctx.fill(); }
         if (dmg > 0.7) { ctx.fillStyle = 'rgba(139, 0, 0, 0.5)'; ctx.beginPath(); ctx.ellipse(15, -25, 10, 5, -0.2, 0, Math.PI*2); ctx.fill(); }
