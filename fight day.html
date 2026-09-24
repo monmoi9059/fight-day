@@ -448,10 +448,12 @@
             player.isBlocking = false;
             if (player.exhausted || player.dodgeState !== 'none') return;
 
-            if (keys.arrowup && player.arms.right.state === 'idle') launchPunch('right', 'overhead');
-            else if (keys.arrowdown && player.arms.right.state === 'idle') launchPunch('right', 'uppercut');
-            else if (keys.arrowleft && player.arms.left.state === 'idle') launchPunch('left', 'straight');
-            else if (keys.arrowright && player.arms.right.state === 'idle') launchPunch('right', 'straight');
+            let isAlt = keys.shift;
+
+            if (keys.arrowup && player.arms.right.state === 'idle') launchPunch('right', isAlt ? 'heavy_overhead' : 'overhead');
+            else if (keys.arrowdown && player.arms.right.state === 'idle') launchPunch('right', isAlt ? 'bolo' : 'uppercut');
+            else if (keys.arrowleft && player.arms.left.state === 'idle') launchPunch('left', isAlt ? 'haymaker' : 'straight');
+            else if (keys.arrowright && player.arms.right.state === 'idle') launchPunch('right', isAlt ? 'haymaker' : 'straight');
         }
     }
 
@@ -473,6 +475,8 @@
 
     function launchPunch(side, punchType = 'straight') {
         let cost = 12 - (player.stats.stamina * 0.05);
+        if (punchType === 'haymaker' || punchType === 'heavy_overhead' || punchType === 'bolo') cost *= 1.5;
+
         if (player.sta < cost) { player.exhausted = true; setTimeout(() => { player.exhausted = false; }, 1500); return; }
         player.sta -= cost;
         
@@ -482,14 +486,13 @@
         arm.progress = 0;
         arm.punchType = punchType;
 
-        // Target base is from the crosshair which is aimed by mouse, but we override it slightly for flavor
         let tx = view.crossX + (Math.random() - 0.5) * spread * 2;
         let ty = view.crossY + (Math.random() - 0.5) * spread * 2;
 
-        if (punchType === 'overhead') {
-            ty -= 50; // Aim higher
-        } else if (punchType === 'uppercut') {
-            ty += 50; // Aim lower initially, swings up
+        if (punchType === 'overhead' || punchType === 'heavy_overhead') {
+            ty -= 50;
+        } else if (punchType === 'uppercut' || punchType === 'bolo') {
+            ty += 50;
         }
 
         arm.targetX = tx;
@@ -528,6 +531,14 @@
 
         if (headHit || bodyHit) {
             let dmg = (player.stats.power * 1.3) + (Math.random() * 5);
+            if (player.arms.left.punchType === 'haymaker' || player.arms.right.punchType === 'haymaker' || player.arms.right.punchType === 'heavy_overhead' || player.arms.right.punchType === 'bolo') {
+                // If the arm that hit was a heavy punch... wait, resolvePlayerHit doesn't know WHICH arm hit.
+                // We can approximate by checking if ANY arm is currently punching with a heavy type
+                if ((player.arms.left.state === 'retracting' && ['haymaker','heavy_overhead','bolo'].includes(player.arms.left.punchType)) ||
+                    (player.arms.right.state === 'retracting' && ['haymaker','heavy_overhead','bolo'].includes(player.arms.right.punchType))) {
+                    dmg *= 1.8;
+                }
+            }
                 let isCounter = player.counterWindow > 0 && opponent.state !== 'blocking';
                 if (isCounter) {
                     dmg *= 2.5;
@@ -648,6 +659,11 @@
         }
 
         let pSpeedMod = player.exhausted ? 0.03 : (0.07 + (player.stats.speed * 0.0025));
+        ['left', 'right'].forEach(side => {
+            if (player.arms[side].state === 'punching' && ['haymaker', 'heavy_overhead', 'bolo'].includes(player.arms[side].punchType)) {
+                pSpeedMod *= 0.65; // Slow down heavy punches
+            }
+        });
         ['left', 'right'].forEach(side => {
             let arm = player.arms[side];
             if (arm.state === 'punching') {
@@ -1013,11 +1029,15 @@
             let cx = baseX + (arm.targetX - baseX) * ease; let cy = baseY + (arm.targetY - baseY) * ease;
 
             // Apply different animations based on punch type
-            if (arm.punchType === 'overhead') {
-                cy -= Math.sin(arm.progress * Math.PI) * 150; // Arc upwards
-            } else if (arm.punchType === 'uppercut') {
-                cy += Math.sin(arm.progress * Math.PI) * 150; // Dip downwards
-                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 80; // Swing slightly wide
+            if (arm.punchType === 'overhead' || arm.punchType === 'heavy_overhead') {
+                cy -= Math.sin(arm.progress * Math.PI) * (arm.punchType === 'heavy_overhead' ? 220 : 150);
+                if (arm.punchType === 'heavy_overhead') cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 40;
+            } else if (arm.punchType === 'uppercut' || arm.punchType === 'bolo') {
+                cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 200 : 150);
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 120 : 80);
+            } else if (arm.punchType === 'haymaker') {
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200; // Super wide hook/haymaker
+                cy -= Math.sin(arm.progress * Math.PI) * 30;
             }
             let radius = 120 - (ease * 65); 
 
