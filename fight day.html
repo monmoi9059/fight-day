@@ -1011,6 +1011,14 @@
             let baseX = side === 'left' ? 250 : 774; let baseY = 750;
             let ease = arm.state === 'punching' ? 1 - Math.pow(1 - arm.progress, 4) : arm.progress; 
             let cx = baseX + (arm.targetX - baseX) * ease; let cy = baseY + (arm.targetY - baseY) * ease;
+
+            // Apply different animations based on punch type
+            if (arm.punchType === 'overhead') {
+                cy -= Math.sin(arm.progress * Math.PI) * 150; // Arc upwards
+            } else if (arm.punchType === 'uppercut') {
+                cy += Math.sin(arm.progress * Math.PI) * 150; // Dip downwards
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 80; // Swing slightly wide
+            }
             let radius = 120 - (ease * 65); 
 
             if (arm.progress > 0) {
