@@ -165,7 +165,7 @@
     let camShake = { x: 0, y: 0, rot: 0 };
     
     const mouse = { x: 512, y: 384, left: false, right: false };
-    const keys = { w: false, a: false, s: false, d: false, q: false, e: false, shift: false };
+    const keys = { w: false, a: false, s: false, d: false, q: false, e: false, shift: false, arrowup: false, arrowdown: false, arrowleft: false, arrowright: false };
     const actions = { dodgeLeft: false, dodgeRight: false };
 
     let particles = [];
@@ -399,6 +399,11 @@
         if (gameState === 'KNOCKDOWN' && kd.fighter === 'player' && k === ' ') { mashRecovery(); return; }
         if (gameState !== 'FIGHT') return;
         if (k === 'shift') keys.shift = true;
+        if (k === 'arrowleft') keys.arrowleft = true;
+        if (k === 'arrowright') keys.arrowright = true;
+        if (k === 'arrowup') keys.arrowup = true;
+        if (k === 'arrowdown') keys.arrowdown = true;
+        handlePunchInput();
         if (k === 'w') keys.w = true; if (k === 's') keys.s = true; if (k === 'a') keys.a = true; if (k === 'd') keys.d = true;
         if (k === 'q' && !keys.q) { keys.q = true; actions.dodgeLeft = true; }
         if (k === 'e' && !keys.e) { keys.e = true; actions.dodgeRight = true; }
@@ -406,6 +411,11 @@
     window.addEventListener('keyup', e => {
         let k = e.key.toLowerCase();
         if (k === 'shift') keys.shift = false;
+        if (k === 'arrowleft') keys.arrowleft = false;
+        if (k === 'arrowright') keys.arrowright = false;
+        if (k === 'arrowup') keys.arrowup = false;
+        if (k === 'arrowdown') keys.arrowdown = false;
+        handlePunchInput();
         if (k === 'w') keys.w = false; if (k === 's') keys.s = false; if (k === 'a') keys.a = false; if (k === 'd') keys.d = false;
         if (k === 'q') keys.q = false; if (k === 'e') keys.e = false;
     });
@@ -418,25 +428,30 @@
     canvas.addEventListener('mousedown', e => {
         if (gameState === 'KNOCKDOWN' && kd.fighter === 'player') { mashRecovery(); return; }
         if (gameState !== 'FIGHT') return;
-        if (e.button === 0) mouse.left = true; 
-        if (e.button === 2) mouse.right = true;
-        handlePunchInput();
+        // mouse punching disabled
+        // if (e.button === 0) mouse.left = true;
+        // if (e.button === 2) mouse.right = true;
+        // handlePunchInput();
     });
     canvas.addEventListener('mouseup', e => {
         if (gameState !== 'FIGHT') return;
-        if (e.button === 0) mouse.left = false; 
-        if (e.button === 2) mouse.right = false;
-        handlePunchInput();
+        // mouse punching disabled
+        // if (e.button === 0) mouse.left = false;
+        // if (e.button === 2) mouse.right = false;
+        // handlePunchInput();
     });
 
     // --- CORE GAME MECHANICS ---
     function handlePunchInput() {
-        if (mouse.left && mouse.right) { player.isBlocking = true; } 
+        if (keys.arrowleft && keys.arrowright) { player.isBlocking = true; }
         else {
             player.isBlocking = false;
             if (player.exhausted || player.dodgeState !== 'none') return;
-            if (mouse.left && player.arms.left.state === 'idle') launchPunch('left');
-            if (mouse.right && player.arms.right.state === 'idle') launchPunch('right');
+
+            if (keys.arrowup && player.arms.right.state === 'idle') launchPunch('right', 'overhead');
+            else if (keys.arrowdown && player.arms.right.state === 'idle') launchPunch('right', 'uppercut');
+            else if (keys.arrowleft && player.arms.left.state === 'idle') launchPunch('left', 'straight');
+            else if (keys.arrowright && player.arms.right.state === 'idle') launchPunch('right', 'straight');
         }
     }
 
@@ -456,7 +471,7 @@
         document.getElementById('kd-recovery-bar').style.width = `${kd.playerProgress}%`;
     }
 
-    function launchPunch(side) {
+    function launchPunch(side, punchType = 'straight') {
         let cost = 12 - (player.stats.stamina * 0.05);
         if (player.sta < cost) { player.exhausted = true; setTimeout(() => { player.exhausted = false; }, 1500); return; }
         player.sta -= cost;
@@ -465,8 +480,20 @@
         let arm = player.arms[side];
         arm.state = 'punching'; 
         arm.progress = 0;
-        arm.targetX = view.crossX + (Math.random() - 0.5) * spread * 2; 
-        arm.targetY = view.crossY + (Math.random() - 0.5) * spread * 2;
+        arm.punchType = punchType;
+
+        // Target base is from the crosshair which is aimed by mouse, but we override it slightly for flavor
+        let tx = view.crossX + (Math.random() - 0.5) * spread * 2;
+        let ty = view.crossY + (Math.random() - 0.5) * spread * 2;
+
+        if (punchType === 'overhead') {
+            ty -= 50; // Aim higher
+        } else if (punchType === 'uppercut') {
+            ty += 50; // Aim lower initially, swings up
+        }
+
+        arm.targetX = tx;
+        arm.targetY = ty;
 
         let dodgeChance = (opponent.stats.speed * 0.01) + (opponent.stats.defense * 0.005);
         dodgeChance -= (opponent.build.scaleX - 1) * 0.2;
@@ -616,7 +643,7 @@
         view.crossX = mouse.x + Math.sin(Date.now()*0.002) * sway; 
         view.crossY = mouse.y + Math.cos(Date.now()*0.003) * sway;
 
-        if (!mouse.left && !mouse.right && player.arms.left.state === 'idle' && player.arms.right.state === 'idle') {
+        if (!keys.arrowleft && !keys.arrowright && !keys.arrowup && !keys.arrowdown && player.arms.left.state === 'idle' && player.arms.right.state === 'idle') {
             if (player.sta < player.maxSta) player.sta += (player.stats.stamina * 0.1) * (dt/16);
         }
 
