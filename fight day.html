@@ -165,7 +165,7 @@
     let camShake = { x: 0, y: 0, rot: 0 };
     
     const mouse = { x: 512, y: 384, left: false, right: false };
-    const keys = { w: false, a: false, s: false, d: false, q: false, e: false, shift: false };
+    const keys = { w: false, a: false, s: false, d: false, q: false, e: false, shift: false, arrowup: false, arrowdown: false, arrowleft: false, arrowright: false };
     const actions = { dodgeLeft: false, dodgeRight: false };
 
     let particles = [];
@@ -399,6 +399,11 @@
         if (gameState === 'KNOCKDOWN' && kd.fighter === 'player' && k === ' ') { mashRecovery(); return; }
         if (gameState !== 'FIGHT') return;
         if (k === 'shift') keys.shift = true;
+        if (k === 'arrowleft') keys.arrowleft = true;
+        if (k === 'arrowright') keys.arrowright = true;
+        if (k === 'arrowup') keys.arrowup = true;
+        if (k === 'arrowdown') keys.arrowdown = true;
+        handlePunchInput();
         if (k === 'w') keys.w = true; if (k === 's') keys.s = true; if (k === 'a') keys.a = true; if (k === 'd') keys.d = true;
         if (k === 'q' && !keys.q) { keys.q = true; actions.dodgeLeft = true; }
         if (k === 'e' && !keys.e) { keys.e = true; actions.dodgeRight = true; }
@@ -406,6 +411,11 @@
     window.addEventListener('keyup', e => {
         let k = e.key.toLowerCase();
         if (k === 'shift') keys.shift = false;
+        if (k === 'arrowleft') keys.arrowleft = false;
+        if (k === 'arrowright') keys.arrowright = false;
+        if (k === 'arrowup') keys.arrowup = false;
+        if (k === 'arrowdown') keys.arrowdown = false;
+        handlePunchInput();
         if (k === 'w') keys.w = false; if (k === 's') keys.s = false; if (k === 'a') keys.a = false; if (k === 'd') keys.d = false;
         if (k === 'q') keys.q = false; if (k === 'e') keys.e = false;
     });
@@ -418,25 +428,32 @@
     canvas.addEventListener('mousedown', e => {
         if (gameState === 'KNOCKDOWN' && kd.fighter === 'player') { mashRecovery(); return; }
         if (gameState !== 'FIGHT') return;
-        if (e.button === 0) mouse.left = true; 
-        if (e.button === 2) mouse.right = true;
-        handlePunchInput();
+        // mouse punching disabled
+        // if (e.button === 0) mouse.left = true;
+        // if (e.button === 2) mouse.right = true;
+        // handlePunchInput();
     });
     canvas.addEventListener('mouseup', e => {
         if (gameState !== 'FIGHT') return;
-        if (e.button === 0) mouse.left = false; 
-        if (e.button === 2) mouse.right = false;
-        handlePunchInput();
+        // mouse punching disabled
+        // if (e.button === 0) mouse.left = false;
+        // if (e.button === 2) mouse.right = false;
+        // handlePunchInput();
     });
 
     // --- CORE GAME MECHANICS ---
     function handlePunchInput() {
-        if (mouse.left && mouse.right) { player.isBlocking = true; } 
+        if (keys.arrowleft && keys.arrowright) { player.isBlocking = true; }
         else {
             player.isBlocking = false;
             if (player.exhausted || player.dodgeState !== 'none') return;
-            if (mouse.left && player.arms.left.state === 'idle') launchPunch('left');
-            if (mouse.right && player.arms.right.state === 'idle') launchPunch('right');
+
+            let isAlt = keys.shift;
+
+            if (keys.arrowup && player.arms.right.state === 'idle') launchPunch('right', isAlt ? 'heavy_overhead' : 'overhead');
+            else if (keys.arrowdown && player.arms.right.state === 'idle') launchPunch('right', isAlt ? 'bolo' : 'uppercut');
+            else if (keys.arrowleft && player.arms.left.state === 'idle') launchPunch('left', isAlt ? 'haymaker' : 'straight');
+            else if (keys.arrowright && player.arms.right.state === 'idle') launchPunch('right', isAlt ? 'haymaker' : 'straight');
         }
     }
 
@@ -456,8 +473,10 @@
         document.getElementById('kd-recovery-bar').style.width = `${kd.playerProgress}%`;
     }
 
-    function launchPunch(side) {
+    function launchPunch(side, punchType = 'straight') {
         let cost = 12 - (player.stats.stamina * 0.05);
+        if (punchType === 'haymaker' || punchType === 'heavy_overhead' || punchType === 'bolo') cost *= 1.5;
+
         if (player.sta < cost) { player.exhausted = true; setTimeout(() => { player.exhausted = false; }, 1500); return; }
         player.sta -= cost;
         
@@ -465,8 +484,19 @@
         let arm = player.arms[side];
         arm.state = 'punching'; 
         arm.progress = 0;
-        arm.targetX = view.crossX + (Math.random() - 0.5) * spread * 2; 
-        arm.targetY = view.crossY + (Math.random() - 0.5) * spread * 2;
+        arm.punchType = punchType;
+
+        let tx = view.crossX + (Math.random() - 0.5) * spread * 2;
+        let ty = view.crossY + (Math.random() - 0.5) * spread * 2;
+
+        if (punchType === 'overhead' || punchType === 'heavy_overhead') {
+            ty -= 50;
+        } else if (punchType === 'uppercut' || punchType === 'bolo') {
+            ty += 50;
+        }
+
+        arm.targetX = tx;
+        arm.targetY = ty;
 
         let dodgeChance = (opponent.stats.speed * 0.01) + (opponent.stats.defense * 0.005);
         dodgeChance -= (opponent.build.scaleX - 1) * 0.2;
@@ -501,6 +531,14 @@
 
         if (headHit || bodyHit) {
             let dmg = (player.stats.power * 1.3) + (Math.random() * 5);
+            if (player.arms.left.punchType === 'haymaker' || player.arms.right.punchType === 'haymaker' || player.arms.right.punchType === 'heavy_overhead' || player.arms.right.punchType === 'bolo') {
+                // If the arm that hit was a heavy punch... wait, resolvePlayerHit doesn't know WHICH arm hit.
+                // We can approximate by checking if ANY arm is currently punching with a heavy type
+                if ((player.arms.left.state === 'retracting' && ['haymaker','heavy_overhead','bolo'].includes(player.arms.left.punchType)) ||
+                    (player.arms.right.state === 'retracting' && ['haymaker','heavy_overhead','bolo'].includes(player.arms.right.punchType))) {
+                    dmg *= 1.8;
+                }
+            }
                 let isCounter = player.counterWindow > 0 && opponent.state !== 'blocking';
                 if (isCounter) {
                     dmg *= 2.5;
@@ -616,11 +654,16 @@
         view.crossX = mouse.x + Math.sin(Date.now()*0.002) * sway; 
         view.crossY = mouse.y + Math.cos(Date.now()*0.003) * sway;
 
-        if (!mouse.left && !mouse.right && player.arms.left.state === 'idle' && player.arms.right.state === 'idle') {
+        if (!keys.arrowleft && !keys.arrowright && !keys.arrowup && !keys.arrowdown && player.arms.left.state === 'idle' && player.arms.right.state === 'idle') {
             if (player.sta < player.maxSta) player.sta += (player.stats.stamina * 0.1) * (dt/16);
         }
 
         let pSpeedMod = player.exhausted ? 0.03 : (0.07 + (player.stats.speed * 0.0025));
+        ['left', 'right'].forEach(side => {
+            if (player.arms[side].state === 'punching' && ['haymaker', 'heavy_overhead', 'bolo'].includes(player.arms[side].punchType)) {
+                pSpeedMod *= 0.65; // Slow down heavy punches
+            }
+        });
         ['left', 'right'].forEach(side => {
             let arm = player.arms[side];
             if (arm.state === 'punching') {
@@ -984,6 +1027,18 @@
             let baseX = side === 'left' ? 250 : 774; let baseY = 750;
             let ease = arm.state === 'punching' ? 1 - Math.pow(1 - arm.progress, 4) : arm.progress; 
             let cx = baseX + (arm.targetX - baseX) * ease; let cy = baseY + (arm.targetY - baseY) * ease;
+
+            // Apply different animations based on punch type
+            if (arm.punchType === 'overhead' || arm.punchType === 'heavy_overhead') {
+                cy -= Math.sin(arm.progress * Math.PI) * (arm.punchType === 'heavy_overhead' ? 220 : 150);
+                if (arm.punchType === 'heavy_overhead') cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 40;
+            } else if (arm.punchType === 'uppercut' || arm.punchType === 'bolo') {
+                cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 200 : 150);
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 120 : 80);
+            } else if (arm.punchType === 'haymaker') {
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200; // Super wide hook/haymaker
+                cy -= Math.sin(arm.progress * Math.PI) * 30;
+            }
             let radius = 120 - (ease * 65); 
 
             if (arm.progress > 0) {
