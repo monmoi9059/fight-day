@@ -908,7 +908,7 @@
         ctx.shadowColor = 'rgba(0, 150, 255, 0.4)'; ctx.shadowBlur = 20;
 
         // Solid Neck Base (Drawn before torso so torso overlaps it)
-        let neckWidth = 35 * b.scaleX * b.muscle;
+        let neckWidth = 22 * b.scaleX + (8 * b.muscle);
         let neckHeight = 45 * b.scaleY;
         let neckGrd = ctx.createLinearGradient(ox - neckWidth, oy, ox + neckWidth, oy);
         neckGrd.addColorStop(0, skinDark); neckGrd.addColorStop(0.5, skinBase); neckGrd.addColorStop(1, skinDark);
@@ -1046,8 +1046,8 @@
 
         // Neck Muscles (Sternocleidomastoid)
         ctx.strokeStyle = `rgba(0,0,0,${0.2 * b.muscle})`; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(ox - 15, oy); ctx.lineTo(ox - 25, oy - 30*b.scaleY); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(ox + 15, oy); ctx.lineTo(ox + 25, oy - 30*b.scaleY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox - 12, oy); ctx.lineTo(ox - (neckWidth - 5), oy - 30*b.scaleY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + 12, oy); ctx.lineTo(ox + (neckWidth - 5), oy - 30*b.scaleY); ctx.stroke();
 
         ctx.save(); ctx.translate(ox, oy - 40 * b.scaleY); ctx.rotate(headRot);
 
