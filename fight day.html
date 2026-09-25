@@ -994,6 +994,29 @@
         let trGrd = ctx.createLinearGradient(ox - wW, trY, ox + wW, trY);
         trGrd.addColorStop(0, tDark); trGrd.addColorStop(0.5, tColor); trGrd.addColorStop(1, tDark);
         
+        // Draw Legs (behind the shorts)
+        let bounce = kd.active ? 0 : Math.sin(Date.now()*0.005)*5;
+        let legL = ox - wW*0.6; let legR = ox + wW*0.6;
+        let kneeY = trY + 120 + bounce;
+        let ankleY = trY + 220;
+
+        ctx.lineWidth = 45 * b.scaleX; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        // Left Leg (Back)
+        ctx.strokeStyle = skinDark; // shaded darker as it's slightly behind
+        ctx.beginPath(); ctx.moveTo(legL, trY); ctx.lineTo(legL - 10, kneeY); ctx.lineTo(legL - 5, ankleY); ctx.stroke();
+        // Left shoe
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(legL - 5, ankleY + 10, 30, 15, 0, 0, Math.PI*2); ctx.fill();
+
+        // Right Leg (Front)
+        ctx.strokeStyle = skinBase;
+        ctx.beginPath(); ctx.moveTo(legR, trY); ctx.lineTo(legR + 15, kneeY); ctx.lineTo(legR + 10, ankleY); ctx.stroke();
+        // Right Leg Highlight
+        ctx.strokeStyle = skinHigh; ctx.lineWidth = 10 * b.scaleX;
+        ctx.beginPath(); ctx.moveTo(legR, trY + 20); ctx.lineTo(legR + 15, kneeY); ctx.lineTo(legR + 10, ankleY - 20); ctx.stroke();
+        // Right shoe
+        ctx.fillStyle = '#222'; ctx.beginPath(); ctx.ellipse(legR + 10, ankleY + 10, 35, 18, -0.1, 0, Math.PI*2); ctx.fill();
+
+        // Draw Shorts
         ctx.fillStyle = trGrd; ctx.beginPath(); 
         ctx.moveTo(ox - wW - 5, trY); ctx.quadraticCurveTo(ox, trY + 20, ox + wW + 5, trY);
         ctx.lineTo(ox + wW + 20, trY + 80); ctx.lineTo(ox - wW - 20, trY + 80); ctx.fill();
@@ -1012,6 +1035,14 @@
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(ox - wW - 10, trY - 10, (wW*2) + 20, 25);
 
         let headRot = opponent.state === 'hurt' ? -0.2 : (opponent.state === 'windup' ? 0.1 : 0);
+
+        // Solid Neck Base
+        let neckWidth = 35 * b.scaleX * b.muscle;
+        let neckHeight = 45 * b.scaleY;
+        let neckGrd = ctx.createLinearGradient(ox - neckWidth, oy, ox + neckWidth, oy);
+        neckGrd.addColorStop(0, skinDark); neckGrd.addColorStop(0.5, skinBase); neckGrd.addColorStop(1, skinDark);
+        ctx.fillStyle = neckGrd;
+        ctx.fillRect(ox - neckWidth, oy - neckHeight, neckWidth * 2, neckHeight + 10);
 
         // Neck Muscles (Sternocleidomastoid)
         ctx.strokeStyle = `rgba(0,0,0,${0.2 * b.muscle})`; ctx.lineWidth = 3;
