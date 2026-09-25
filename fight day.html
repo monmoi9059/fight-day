@@ -360,13 +360,17 @@
             player.knockdowns++; kd.playerProgress = 0;
             document.getElementById('kd-ui-player').classList.remove('hidden');
             document.getElementById('kd-recovery-bar').style.width = "0%";
-            opponent.worldX = 150; opponent.worldZ = 150; 
+            opponent.worldX = 150; opponent.worldZ = 150;
+            opponent.hp = Math.min(opponent.maxHp, opponent.hp + (opponent.maxHp * 0.15));
+            document.getElementById('hud-o-hp').style.width = `${Math.max(0, (opponent.hp / opponent.maxHp) * 100)}%`;
         } else {
             opponent.knockdowns++; document.getElementById('kd-ui-player').classList.add('hidden');
             let recoveryChance = 100 - (opponent.knockdowns * 30) + (opponent.stats.heart * 2);
             kd.oppWillWake = (Math.random() * 100) < recoveryChance;
             kd.oppWakeCount = Math.floor(Math.random() * 4) + 5; 
             player.worldX = 0; player.worldZ = -50;
+            player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.15));
+            document.getElementById('hud-p-hp').style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
         }
     }
 
@@ -1051,8 +1055,36 @@
         }
 
 
-        if (dmg > 0.3) { ctx.fillStyle = 'rgba(75, 0, 130, 0.4)'; ctx.beginPath(); ctx.ellipse(-20, -15, 15, 10, 0.2, 0, Math.PI*2); ctx.fill(); }
-        if (dmg > 0.7) { ctx.fillStyle = 'rgba(139, 0, 0, 0.5)'; ctx.beginPath(); ctx.ellipse(15, -25, 10, 5, -0.2, 0, Math.PI*2); ctx.fill(); }
+        // Advanced Facial Damage
+        if (dmg > 0.2) {
+            // Swollen left cheek
+            ctx.fillStyle = `rgba(75, 0, 130, ${dmg * 0.5})`;
+            ctx.beginPath(); ctx.ellipse(-20, 5, 12, 18, 0.2, 0, Math.PI*2); ctx.fill();
+        }
+        if (dmg > 0.4) {
+            // Swollen right eye
+            ctx.fillStyle = `rgba(100, 20, 100, ${dmg * 0.7})`;
+            ctx.beginPath(); ctx.ellipse(15, -15, 12, 10, -0.2, 0, Math.PI*2); ctx.fill();
+            // Minor cut on lip
+            ctx.fillStyle = `rgba(180, 0, 0, ${dmg})`;
+            ctx.beginPath(); ctx.ellipse(-5, 18, 4, 1.5, 0.2, 0, Math.PI*2); ctx.fill();
+        }
+        if (dmg > 0.7) {
+            // Deep cut left eyebrow
+            ctx.fillStyle = `rgba(139, 0, 0, ${dmg})`;
+            ctx.beginPath(); ctx.ellipse(-20, -25, 8, 2.5, -0.2, 0, Math.PI*2); ctx.fill();
+            // Blood dripping from eyebrow
+            ctx.strokeStyle = `rgba(150, 0, 0, ${dmg * 0.8})`; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-20, -25); ctx.quadraticCurveTo(-22, -15, -20, -5); ctx.stroke();
+            // Cut on right cheek
+            ctx.fillStyle = `rgba(160, 0, 0, ${dmg})`;
+            ctx.beginPath(); ctx.ellipse(20, -5, 6, 2, 0.5, 0, Math.PI*2); ctx.fill();
+        }
+        if (dmg > 0.9) {
+            // Very swollen left eye
+            ctx.fillStyle = `rgba(50, 10, 50, 0.9)`;
+            ctx.beginPath(); ctx.ellipse(-15, -12, 10, 12, 0, 0, Math.PI*2); ctx.fill();
+        }
 
         let eyeY = -10 * b.scaleY; let ew = 22 * b.jaw;
 
