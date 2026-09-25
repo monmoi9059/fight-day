@@ -485,7 +485,6 @@
             }
         }
     }
-    }
 
     function mashRecovery() {
         if (gameState !== 'KNOCKDOWN' || kd.fighter !== 'player') return;
@@ -920,7 +919,7 @@
         let ox = opponent.localX; let oy = opponent.localY;
         let b = opponent.build; let dmg = opponent.damageFactor; 
 
-        if (opponent.state === 'hurt') ctx.globalCompositeOperation = "color-dodge";
+
 
         let skinBase = mixColor(opponent.skin.base, '#8c1a1a', dmg * 0.5); 
         let skinDark = mixColor(opponent.skin.dark, '#3a0000', dmg * 0.6);
