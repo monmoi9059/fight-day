@@ -173,6 +173,7 @@
 
     let player = {
         name: "Contender", color: "#e84118", money: 0, wins: 0, losses: 0, rank: 100,
+        skin: { base: "#e1b182", dark: "#9c6d42", high: "#fcdbb8" },
         stats: { power: 10, speed: 10, defense: 10, stamina: 10, accuracy: 10, reach: 10, heart: 10 },
         hp: 100, maxHp: 100, sta: 100, maxSta: 100, isBlocking: false, exhausted: false, knockdowns: 0,
         worldX: 0, worldZ: 0, dodgeState: 'none', dodgeTimer: 0, dodgeOffset: 0, tilt: 0, counterWindow: 0, leanX: 0, leanY: 0,
@@ -906,6 +907,14 @@
         
         ctx.shadowColor = 'rgba(0, 150, 255, 0.4)'; ctx.shadowBlur = 20;
 
+        // Solid Neck Base (Drawn before torso so torso overlaps it)
+        let neckWidth = 22 * b.scaleX + (8 * b.muscle);
+        let neckHeight = 45 * b.scaleY;
+        let neckGrd = ctx.createLinearGradient(ox - neckWidth, oy, ox + neckWidth, oy);
+        neckGrd.addColorStop(0, skinDark); neckGrd.addColorStop(0.5, skinBase); neckGrd.addColorStop(1, skinDark);
+        ctx.fillStyle = neckGrd;
+        ctx.fillRect(ox - neckWidth, oy - neckHeight, neckWidth * 2, neckHeight + 60);
+
         let bodyGrd = ctx.createRadialGradient(ox, oy+80, 20, ox, oy+100, 140);
         bodyGrd.addColorStop(0, skinHigh); bodyGrd.addColorStop(0.3, skinBase); bodyGrd.addColorStop(1, skinDark);
         ctx.fillStyle = bodyGrd;
@@ -923,6 +932,23 @@
         ctx.beginPath(); ctx.moveTo(ox - (sW*0.9), pecY); 
         ctx.bezierCurveTo(ox - (sW*0.4), pecY + 40, ox, pecY + 40, ox, pecY + 25); 
         ctx.bezierCurveTo(ox, pecY + 40, ox + (sW*0.4), pecY + 40, ox + (sW*0.9), pecY); ctx.stroke();
+
+        // Inner/Upper Pec details
+        if (muscAlpha > 0.3) {
+            ctx.lineWidth = 2 * muscAlpha;
+            ctx.beginPath(); ctx.moveTo(ox, pecY + 25); ctx.lineTo(ox, pecY + 5); ctx.stroke(); // Cleavage
+            ctx.beginPath(); ctx.moveTo(ox - sW*0.1, pecY + 20); ctx.quadraticCurveTo(ox - sW*0.4, pecY + 15, ox - sW*0.7, pecY - 5); ctx.stroke(); // Left upper pec
+            ctx.beginPath(); ctx.moveTo(ox + sW*0.1, pecY + 20); ctx.quadraticCurveTo(ox + sW*0.4, pecY + 15, ox + sW*0.7, pecY - 5); ctx.stroke(); // Right upper pec
+        }
+
+        // Trapezius (Traps)
+        ctx.strokeStyle = `rgba(0,0,0,${0.2 * b.muscle})`; ctx.lineWidth = 4 * b.muscle;
+        ctx.beginPath(); ctx.moveTo(ox - 25, oy - 20); ctx.quadraticCurveTo(ox - sW*0.6, oy - 10, ox - sW, oy + 10); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + 25, oy - 20); ctx.quadraticCurveTo(ox + sW*0.6, oy - 10, ox + sW, oy + 10); ctx.stroke();
+
+        // Deltoids (Shoulders)
+        ctx.beginPath(); ctx.moveTo(ox - sW, oy + 10); ctx.quadraticCurveTo(ox - sW - 15, oy + 40, ox - sW + 10, oy + 70); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + sW, oy + 10); ctx.quadraticCurveTo(ox + sW + 15, oy + 40, ox + sW - 10, oy + 70); ctx.stroke();
 
         // Collarbones
         ctx.strokeStyle = `rgba(0,0,0,${0.3 * Math.max(0.5, b.muscle)})`; ctx.lineWidth = 3 * Math.max(0.8, b.muscle);
@@ -960,9 +986,15 @@
             }
 
             ctx.lineWidth = 2.5 * muscAlpha;
+            // Linea alba (middle ab line)
+            ctx.beginPath(); ctx.moveTo(ox, pecY + 25); ctx.lineTo(ox, navelY - 5); ctx.stroke();
+
             for(let i=0; i<3; i++) {
                 let abY = pecY + 50 + (i*25);
                 ctx.beginPath(); ctx.moveTo(ox-25*b.scaleX, abY); ctx.quadraticCurveTo(ox, abY+10, ox+25*b.scaleX, abY); ctx.stroke();
+                // Add vertical ab lines for realistic six-pack
+                ctx.beginPath(); ctx.moveTo(ox-25*b.scaleX, abY); ctx.lineTo(ox-22*b.scaleX, abY-15); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(ox+25*b.scaleX, abY); ctx.lineTo(ox+22*b.scaleX, abY-15); ctx.stroke();
             }
         }
 
@@ -970,6 +1002,29 @@
         let trGrd = ctx.createLinearGradient(ox - wW, trY, ox + wW, trY);
         trGrd.addColorStop(0, tDark); trGrd.addColorStop(0.5, tColor); trGrd.addColorStop(1, tDark);
         
+        // Draw Legs (behind the shorts)
+        let bounce = kd.active ? 0 : Math.sin(Date.now()*0.005)*5;
+        let legL = ox - wW*0.6; let legR = ox + wW*0.6;
+        let kneeY = trY + 120 + bounce;
+        let ankleY = trY + 220;
+
+        ctx.lineWidth = 45 * b.scaleX; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        // Left Leg (Back)
+        ctx.strokeStyle = skinDark; // shaded darker as it's slightly behind
+        ctx.beginPath(); ctx.moveTo(legL, trY); ctx.lineTo(legL - 10, kneeY); ctx.lineTo(legL - 5, ankleY); ctx.stroke();
+        // Left shoe
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(legL - 5, ankleY + 10, 30, 15, 0, 0, Math.PI*2); ctx.fill();
+
+        // Right Leg (Front)
+        ctx.strokeStyle = skinBase;
+        ctx.beginPath(); ctx.moveTo(legR, trY); ctx.lineTo(legR + 15, kneeY); ctx.lineTo(legR + 10, ankleY); ctx.stroke();
+        // Right Leg Highlight
+        ctx.strokeStyle = skinHigh; ctx.lineWidth = 10 * b.scaleX;
+        ctx.beginPath(); ctx.moveTo(legR, trY + 20); ctx.lineTo(legR + 15, kneeY); ctx.lineTo(legR + 10, ankleY - 20); ctx.stroke();
+        // Right shoe
+        ctx.fillStyle = '#222'; ctx.beginPath(); ctx.ellipse(legR + 10, ankleY + 10, 35, 18, -0.1, 0, Math.PI*2); ctx.fill();
+
+        // Draw Shorts
         ctx.fillStyle = trGrd; ctx.beginPath(); 
         ctx.moveTo(ox - wW - 5, trY); ctx.quadraticCurveTo(ox, trY + 20, ox + wW + 5, trY);
         ctx.lineTo(ox + wW + 20, trY + 80); ctx.lineTo(ox - wW - 20, trY + 80); ctx.fill();
@@ -991,8 +1046,8 @@
 
         // Neck Muscles (Sternocleidomastoid)
         ctx.strokeStyle = `rgba(0,0,0,${0.2 * b.muscle})`; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(ox - 15, oy); ctx.lineTo(ox - 25, oy - 30*b.scaleY); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(ox + 15, oy); ctx.lineTo(ox + 25, oy - 30*b.scaleY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox - 12, oy); ctx.lineTo(ox - (neckWidth - 5), oy - 30*b.scaleY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + 12, oy); ctx.lineTo(ox + (neckWidth - 5), oy - 30*b.scaleY); ctx.stroke();
 
         ctx.save(); ctx.translate(ox, oy - 40 * b.scaleY); ctx.rotate(headRot);
 
@@ -1009,6 +1064,11 @@
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.beginPath(); ctx.ellipse(-hw-1, 5, 2, 6, -0.2, 0, Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.ellipse(hw+1, 5, 2, 6, 0.2, 0, Math.PI*2); ctx.fill();
+
+        // Ear Cartilage Detail
+        ctx.strokeStyle = `rgba(0,0,0,0.3)`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(-hw+1, 2, 3, Math.PI*0.5, Math.PI*1.5); ctx.stroke();
+        ctx.beginPath(); ctx.arc(hw-1, 2, 3, -Math.PI*0.5, Math.PI*0.5); ctx.stroke();
         ctx.fillStyle = headGrd; // Reset
 
         ctx.beginPath(); ctx.moveTo(-hw, -hh); ctx.quadraticCurveTo(0, -hh - 15, hw, -hh); 
@@ -1024,6 +1084,23 @@
         ctx.fillStyle = `rgba(0,0,0,${0.15 * b.scaleY})`;
         ctx.beginPath(); ctx.ellipse(-hw*0.6, 5, hw*0.3, 8, -0.4, 0, Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.ellipse(hw*0.6, 5, hw*0.3, 8, 0.4, 0, Math.PI*2); ctx.fill();
+
+        // Eye Sockets (Orbital bone shadow)
+        ctx.fillStyle = `rgba(0,0,0,0.15)`;
+        ctx.beginPath(); ctx.ellipse(-15, -10 * b.scaleY, 12, 8, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(15, -10 * b.scaleY, 12, 8, 0, 0, Math.PI*2); ctx.fill();
+
+        // Forehead Wrinkles
+        ctx.strokeStyle = `rgba(0,0,0,0.15)`; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(-15, -30 * b.scaleY); ctx.quadraticCurveTo(0, -27 * b.scaleY, 15, -30 * b.scaleY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-20, -35 * b.scaleY); ctx.quadraticCurveTo(0, -32 * b.scaleY, 20, -35 * b.scaleY); ctx.stroke();
+
+        // Nasolabial Folds (Smile Lines)
+        ctx.beginPath(); ctx.moveTo(-8, -10 * b.scaleY + 22); ctx.quadraticCurveTo(-12, 18, -10, 25); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(8, -10 * b.scaleY + 22); ctx.quadraticCurveTo(12, 18, 10, 25); ctx.stroke();
+
+        // Chin Cleft/Shadow
+        ctx.beginPath(); ctx.moveTo(-6, 33); ctx.quadraticCurveTo(0, 36, 6, 33); ctx.stroke();
 
         // Facial Hair
         ctx.fillStyle = b.hairColor || '#111';
@@ -1238,10 +1315,35 @@
             let radius = 120 - (ease * 65); 
 
             if (arm.progress > 0) {
-                ctx.strokeStyle = player.color; ctx.globalAlpha = 0.25; ctx.lineWidth = radius * 1.6; ctx.lineCap = 'round';
+                let skinBase = player.skin.base;
+                let skinDark = player.skin.dark;
+                let skinHigh = player.skin.high;
+
+                // Shadow / Outline
+                ctx.strokeStyle = skinDark; ctx.globalAlpha = 1.0; ctx.lineWidth = radius * 1.6; ctx.lineCap = 'round';
                 ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.lineTo(cx, cy); ctx.stroke();
-                ctx.strokeStyle = '#fff'; ctx.globalAlpha = 0.5; ctx.lineWidth = radius * 0.4;
-                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.lineTo(cx, cy); ctx.stroke(); ctx.globalAlpha = 1.0;
+
+                // Base skin color
+                ctx.strokeStyle = skinBase; ctx.lineWidth = radius * 1.3;
+                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.lineTo(cx, cy); ctx.stroke();
+
+                // Highlight
+                ctx.strokeStyle = skinHigh; ctx.lineWidth = radius * 0.5; ctx.globalAlpha = 0.6;
+                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.lineTo(cx, cy); ctx.stroke();
+                ctx.globalAlpha = 1.0;
+
+                // Muscle definition (Bicep/Forearm crease)
+                let midX = (baseX + cx) / 2;
+                let midY = (baseY + cy) / 2;
+                let angle = Math.atan2(cy - baseY, cx - baseX);
+
+                ctx.save();
+                ctx.translate(midX, midY);
+                ctx.rotate(angle);
+                ctx.strokeStyle = `rgba(0,0,0,0.25)`; ctx.lineWidth = radius * 0.15;
+                // Draw a subtle curved crease for the inner elbow/bicep
+                ctx.beginPath(); ctx.moveTo(-radius * 0.2, -radius * 0.5); ctx.quadraticCurveTo(0, 0, -radius * 0.2, radius * 0.5); ctx.stroke();
+                ctx.restore();
             }
 
             if (arm.state === 'idle') { cx += Math.sin(Date.now()*0.003 + (side==='left'?0:Math.PI))*12; cy += Math.cos(Date.now()*0.004)*12; }
