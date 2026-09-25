@@ -96,9 +96,10 @@
         <h1>Pro Contender</h1>
         <h2>Realistic Procedural Engine</h2>
         <div style="background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 25px; width: 75%; font-size: 18px;">
-            <p><strong>WASD:</strong> Move &nbsp;|&nbsp; <strong>Q / E:</strong> Dodge Left / Right</p>
+            <p><strong>WASD:</strong> Move &nbsp;|&nbsp; <strong>Z / C:</strong> Dodge Left / Right</p>
             <p><strong>Shift + WASD:</strong> Body Lean (Slip Punches)</p>
-            <p><strong>L-Click:</strong> Left Punch &nbsp;|&nbsp; <strong>R-Click:</strong> Right Punch &nbsp;|&nbsp; <strong>Both:</strong> Guard</p>
+            <p><strong>Arrows:</strong> Punch &nbsp;|&nbsp; <strong>Left+Right Arrows:</strong> Guard</p>
+            <p><strong>Shift / Q / E + Arrows:</strong> Heavy / Technical / Inside Punch Modifiers</p>
             <p style="color: #fbc531; font-weight: bold; font-size: 16px;">Face highly detailed, procedurally generated opponents with unique body types. Back them into the ropes!</p>
         </div>
         <button onclick="showUI('menu-creator')">Start Career</button>
@@ -883,7 +884,7 @@
         
         ctx.restore(); 
 
-        if (gameState === 'FIGHT') drawCrosshair();
+        // if (gameState === 'FIGHT') drawCrosshair();
     }
 
     function drawVolumetricLights() {
@@ -1430,19 +1431,7 @@
         ctx.beginPath(); ctx.ellipse(x, y - r*0.7, r*0.6, r*0.2, -0.2, 0, Math.PI); ctx.stroke();
     }
 
-    function drawCrosshair() {
-        if (player.isBlocking) return;
-        ctx.strokeStyle = player.exhausted ? '#e84118' : 'rgba(255, 255, 255, 0.7)'; ctx.lineWidth = 3;
-        let cx = view.crossX; let cy = view.crossY;
-        
-        ctx.beginPath(); ctx.moveTo(cx - 20, cy); ctx.lineTo(cx + 20, cy); ctx.moveTo(cx, cy - 20); ctx.lineTo(cx, cy + 20); ctx.stroke();
-        ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI*2); ctx.stroke();
-        
-        let spread = Math.max(0, 45 - (player.stats.accuracy * 1.5));
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; ctx.beginPath(); ctx.arc(cx, cy, spread, 0, Math.PI*2); ctx.stroke();
-
-        if(player.exhausted) { ctx.fillStyle = '#e84118'; ctx.font = '900 20px Impact'; ctx.textAlign = 'center'; ctx.fillText("EXHAUSTED", cx, cy - 30); }
-    }
+    /* drawCrosshair removed */
 
     // Safely declared drawParticles function
     function drawParticles() {
