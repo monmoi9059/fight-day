@@ -96,9 +96,10 @@
         <h1>Pro Contender</h1>
         <h2>Realistic Procedural Engine</h2>
         <div style="background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 25px; width: 75%; font-size: 18px;">
-            <p><strong>WASD:</strong> Move &nbsp;|&nbsp; <strong>Q / E:</strong> Dodge Left / Right</p>
+            <p><strong>WASD:</strong> Move &nbsp;|&nbsp; <strong>Z / C:</strong> Dodge Left / Right</p>
             <p><strong>Shift + WASD:</strong> Body Lean (Slip Punches)</p>
-            <p><strong>L-Click:</strong> Left Punch &nbsp;|&nbsp; <strong>R-Click:</strong> Right Punch &nbsp;|&nbsp; <strong>Both:</strong> Guard</p>
+            <p><strong>Arrows:</strong> Punch &nbsp;|&nbsp; <strong>Left+Right Arrows:</strong> Guard</p>
+            <p><strong>Shift / Q / E + Arrows:</strong> Heavy / Technical / Inside Punch Modifiers</p>
             <p style="color: #fbc531; font-weight: bold; font-size: 16px;">Face highly detailed, procedurally generated opponents with unique body types. Back them into the ropes!</p>
         </div>
         <button onclick="showUI('menu-creator')">Start Career</button>
@@ -454,13 +455,36 @@
             player.isBlocking = false;
             if (player.exhausted || player.dodgeState !== 'none') return;
 
-            let isAlt = keys.shift;
+            let modShift = keys.shift;
+            let modQ = keys.q;
+            let modE = keys.e;
 
-            if (keys.arrowup && player.arms.right.state === 'idle') launchPunch('right', isAlt ? 'heavy_overhead' : 'overhead');
-            else if (keys.arrowdown && player.arms.right.state === 'idle') launchPunch('right', isAlt ? 'bolo' : 'uppercut');
-            else if (keys.arrowleft && player.arms.left.state === 'idle') launchPunch('left', isAlt ? 'haymaker' : 'straight');
-            else if (keys.arrowright && player.arms.right.state === 'idle') launchPunch('right', isAlt ? 'haymaker' : 'straight');
+            if (keys.arrowup && player.arms.right.state === 'idle') {
+                if (modShift) launchPunch('right', 'gazelle_punch'); // Signature
+                else if (modQ) launchPunch('right', 'flicker_jab'); // Thomas Hearns
+                else if (modE) launchPunch('right', 'overhand');
+                else launchPunch('right', 'overhead');
+            }
+            else if (keys.arrowdown && player.arms.right.state === 'idle') {
+                if (modShift) launchPunch('right', 'bolo'); // Sugar Ray Leonard / Kid Gavilan
+                else if (modQ) launchPunch('left', 'lead_uppercut');
+                else if (modE) launchPunch('right', 'shovel_hook');
+                else launchPunch('right', 'uppercut');
+            }
+            else if (keys.arrowleft && player.arms.left.state === 'idle') {
+                if (modShift) launchPunch('left', 'smash'); // Donovan Ruddock
+                else if (modQ) launchPunch('left', 'jab');
+                else if (modE) launchPunch('left', 'liver_shot'); // Micky Ward
+                else launchPunch('left', 'straight');
+            }
+            else if (keys.arrowright && player.arms.right.state === 'idle') {
+                if (modShift) launchPunch('right', 'haymaker');
+                else if (modQ) launchPunch('right', 'pull_counter'); // Floyd Mayweather
+                else if (modE) launchPunch('right', 'body_hook');
+                else launchPunch('right', 'cross');
+            }
         }
+    }
     }
 
     function mashRecovery() {
@@ -481,7 +505,7 @@
 
     function launchPunch(side, punchType = 'straight') {
         let cost = 12 - (player.stats.stamina * 0.05);
-        if (punchType === 'haymaker' || punchType === 'heavy_overhead' || punchType === 'bolo') cost *= 1.5;
+        if (['haymaker', 'heavy_overhead', 'bolo', 'smash', 'gazelle_punch', 'liver_shot'].includes(punchType)) cost *= 1.5;
 
         if (player.sta < cost) { player.exhausted = true; setTimeout(() => { player.exhausted = false; }, 1500); return; }
         player.sta -= cost;
@@ -540,8 +564,9 @@
             if (player.arms.left.punchType === 'haymaker' || player.arms.right.punchType === 'haymaker' || player.arms.right.punchType === 'heavy_overhead' || player.arms.right.punchType === 'bolo') {
                 // If the arm that hit was a heavy punch... wait, resolvePlayerHit doesn't know WHICH arm hit.
                 // We can approximate by checking if ANY arm is currently punching with a heavy type
-                if ((player.arms.left.state === 'retracting' && ['haymaker','heavy_overhead','bolo'].includes(player.arms.left.punchType)) ||
-                    (player.arms.right.state === 'retracting' && ['haymaker','heavy_overhead','bolo'].includes(player.arms.right.punchType))) {
+                let heavyPunches = ['haymaker', 'heavy_overhead', 'bolo', 'smash', 'gazelle_punch', 'liver_shot', 'pull_counter'];
+                if ((player.arms.left.state === 'retracting' && heavyPunches.includes(player.arms.left.punchType)) ||
+                    (player.arms.right.state === 'retracting' && heavyPunches.includes(player.arms.right.punchType))) {
                     dmg *= 1.8;
                 }
             }
@@ -859,7 +884,7 @@
         
         ctx.restore(); 
 
-        if (gameState === 'FIGHT') drawCrosshair();
+        // if (gameState === 'FIGHT') drawCrosshair();
     }
 
     function drawVolumetricLights() {
@@ -1302,16 +1327,43 @@
             let cx = baseX + (arm.targetX - baseX) * ease; let cy = baseY + (arm.targetY - baseY) * ease;
 
             // Apply different animations based on punch type
-            if (arm.punchType === 'overhead' || arm.punchType === 'heavy_overhead') {
-                cy -= Math.sin(arm.progress * Math.PI) * (arm.punchType === 'heavy_overhead' ? 220 : 150);
-                if (arm.punchType === 'heavy_overhead') cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 40;
-            } else if (arm.punchType === 'uppercut' || arm.punchType === 'bolo') {
+            if (arm.punchType === 'overhead' || arm.punchType === 'heavy_overhead' || arm.punchType === 'overhand') {
+                cy -= Math.sin(arm.progress * Math.PI) * (arm.punchType === 'heavy_overhead' ? 220 : 180);
+                if (arm.punchType === 'heavy_overhead' || arm.punchType === 'overhand') cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 50;
+            } else if (arm.punchType === 'uppercut' || arm.punchType === 'bolo' || arm.punchType === 'lead_uppercut') {
                 cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 200 : 150);
                 cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 120 : 80);
             } else if (arm.punchType === 'haymaker') {
                 cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200; // Super wide hook/haymaker
                 cy -= Math.sin(arm.progress * Math.PI) * 30;
+            } else if (arm.punchType === 'body_hook' || arm.punchType === 'shovel_hook' || arm.punchType === 'liver_shot') {
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 160 : 120);
+                cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 140 : 100);
+            } else if (arm.punchType === 'jab' || arm.punchType === 'cross' || arm.punchType === 'straight') {
+                // straight line with slight torque
+                cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 20;
+                cy -= Math.sin(arm.progress * Math.PI) * 10;
+            } else if (arm.punchType === 'flicker_jab') {
+                cy += Math.sin(arm.progress * Math.PI) * 80;
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 40;
+            } else if (arm.punchType === 'smash') {
+                // Ruddock's Smash - hybrid hook/uppercut
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 140;
+                cy += Math.sin(arm.progress * Math.PI) * 100;
+            } else if (arm.punchType === 'gazelle_punch') {
+                // Gazelle Punch - leaping hook
+                cy -= Math.sin(arm.progress * Math.PI) * 50;
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 100;
+            } else if (arm.punchType === 'pull_counter') {
+                // Pull counter - leans back slightly then strikes straight
+                if (arm.progress < 0.3) {
+                    cy += 20; cx += (side === 'left' ? -1 : 1) * 30;
+                } else {
+                    cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 20;
+                    cy -= Math.sin(arm.progress * Math.PI) * 10;
+                }
             }
+
             let radius = 120 - (ease * 65); 
 
             if (arm.progress > 0) {
@@ -1379,19 +1431,7 @@
         ctx.beginPath(); ctx.ellipse(x, y - r*0.7, r*0.6, r*0.2, -0.2, 0, Math.PI); ctx.stroke();
     }
 
-    function drawCrosshair() {
-        if (player.isBlocking) return;
-        ctx.strokeStyle = player.exhausted ? '#e84118' : 'rgba(255, 255, 255, 0.7)'; ctx.lineWidth = 3;
-        let cx = view.crossX; let cy = view.crossY;
-        
-        ctx.beginPath(); ctx.moveTo(cx - 20, cy); ctx.lineTo(cx + 20, cy); ctx.moveTo(cx, cy - 20); ctx.lineTo(cx, cy + 20); ctx.stroke();
-        ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI*2); ctx.stroke();
-        
-        let spread = Math.max(0, 45 - (player.stats.accuracy * 1.5));
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; ctx.beginPath(); ctx.arc(cx, cy, spread, 0, Math.PI*2); ctx.stroke();
-
-        if(player.exhausted) { ctx.fillStyle = '#e84118'; ctx.font = '900 20px Impact'; ctx.textAlign = 'center'; ctx.fillText("EXHAUSTED", cx, cy - 30); }
-    }
+    /* drawCrosshair removed */
 
     // Safely declared drawParticles function
     function drawParticles() {
