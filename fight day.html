@@ -222,6 +222,7 @@
                 let build = {
             scaleX: 1, scaleY: 1, muscle: 1, belly: 0, jaw: 1,
             hair: ['bald', 'buzzcut', 'mohawk', 'afro', 'fade'][Math.floor(Math.random() * 5)],
+            facialHair: ['clean', 'stubble', 'goatee', 'beard'][Math.floor(Math.random() * 4)],
             hairColor: ['#111', '#4a2511', '#e8b831', '#8b2e16'][Math.floor(Math.random() * 4)]
         };
         let styleDesc = "";
@@ -359,13 +360,17 @@
             player.knockdowns++; kd.playerProgress = 0;
             document.getElementById('kd-ui-player').classList.remove('hidden');
             document.getElementById('kd-recovery-bar').style.width = "0%";
-            opponent.worldX = 150; opponent.worldZ = 150; 
+            opponent.worldX = 150; opponent.worldZ = 150;
+            opponent.hp = Math.min(opponent.maxHp, opponent.hp + (opponent.maxHp * 0.15));
+            document.getElementById('hud-o-hp').style.width = `${Math.max(0, (opponent.hp / opponent.maxHp) * 100)}%`;
         } else {
             opponent.knockdowns++; document.getElementById('kd-ui-player').classList.add('hidden');
             let recoveryChance = 100 - (opponent.knockdowns * 30) + (opponent.stats.heart * 2);
             kd.oppWillWake = (Math.random() * 100) < recoveryChance;
             kd.oppWakeCount = Math.floor(Math.random() * 4) + 5; 
             player.worldX = 0; player.worldZ = -50;
+            player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.15));
+            document.getElementById('hud-p-hp').style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
         }
     }
 
@@ -919,9 +924,42 @@
         ctx.bezierCurveTo(ox - (sW*0.4), pecY + 40, ox, pecY + 40, ox, pecY + 25); 
         ctx.bezierCurveTo(ox, pecY + 40, ox + (sW*0.4), pecY + 40, ox + (sW*0.9), pecY); ctx.stroke();
 
+        // Collarbones
+        ctx.strokeStyle = `rgba(0,0,0,${0.3 * Math.max(0.5, b.muscle)})`; ctx.lineWidth = 3 * Math.max(0.8, b.muscle);
+        ctx.beginPath(); ctx.moveTo(ox - sW + 20, oy + 25); ctx.quadraticCurveTo(ox - sW/2, oy + 35, ox - 10, oy + 32); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + sW - 20, oy + 25); ctx.quadraticCurveTo(ox + sW/2, oy + 35, ox + 10, oy + 32); ctx.stroke();
+
+        // Nipples
+        ctx.fillStyle = mixColor(skinDark, '#500', 0.5);
+        ctx.beginPath(); ctx.ellipse(ox - sW*0.45, pecY + 15, 4 + b.belly*2, 3 + b.belly*2, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(ox + sW*0.45, pecY + 15, 4 + b.belly*2, 3 + b.belly*2, 0, 0, Math.PI*2); ctx.fill();
+
+        // Belly button
+        let navelY = oy + bH - 45 + (b.belly*15);
+        ctx.fillStyle = `rgba(0,0,0,0.5)`;
+        ctx.beginPath(); ctx.ellipse(ox, navelY, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = skinHigh; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(ox, navelY-1, 5, Math.PI, 0); ctx.stroke();
+
+
         if (muscAlpha > 0.1) {
             ctx.lineWidth = 2.5 * muscAlpha;
             ctx.beginPath(); ctx.moveTo(ox, pecY + 25); ctx.lineTo(ox, pecY + 120); ctx.stroke(); 
+            // Serratus anterior (ribs)
+
+            // Obliques
+            ctx.lineWidth = 2 * muscAlpha;
+            ctx.beginPath(); ctx.moveTo(ox - sW*0.6, pecY + 80); ctx.quadraticCurveTo(ox - sW*0.8, pecY + 110, ox - wW*0.9, pecY + 140); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(ox + sW*0.6, pecY + 80); ctx.quadraticCurveTo(ox + sW*0.8, pecY + 110, ox + wW*0.9, pecY + 140); ctx.stroke();
+
+            ctx.lineWidth = 1.5 * muscAlpha;
+            for(let i=0; i<3; i++) {
+                let ribY = pecY + 30 + (i*15);
+                ctx.beginPath(); ctx.moveTo(ox - sW*0.8, ribY); ctx.quadraticCurveTo(ox - sW*0.6, ribY+5, ox - sW*0.4, ribY); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(ox + sW*0.8, ribY); ctx.quadraticCurveTo(ox + sW*0.6, ribY+5, ox + sW*0.4, ribY); ctx.stroke();
+            }
+
+            ctx.lineWidth = 2.5 * muscAlpha;
             for(let i=0; i<3; i++) {
                 let abY = pecY + 50 + (i*25);
                 ctx.beginPath(); ctx.moveTo(ox-25*b.scaleX, abY); ctx.quadraticCurveTo(ox, abY+10, ox+25*b.scaleX, abY); ctx.stroke();
@@ -936,10 +974,26 @@
         ctx.moveTo(ox - wW - 5, trY); ctx.quadraticCurveTo(ox, trY + 20, ox + wW + 5, trY);
         ctx.lineTo(ox + wW + 20, trY + 80); ctx.lineTo(ox - wW - 20, trY + 80); ctx.fill();
         
+
+        // Sweat Sheen (increases as stamina drops)
+        let sweatAlpha = Math.max(0, (100 - opponent.sta) / 100) * 0.3;
+        if (sweatAlpha > 0.05) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${sweatAlpha})`;
+            ctx.beginPath(); ctx.ellipse(ox - sW*0.5, oy + 40, sW*0.2, 10, -0.2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(ox + sW*0.5, oy + 40, sW*0.2, 10, 0.2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(ox, oy + 80, 10, 30, 0, 0, Math.PI*2); ctx.fill();
+        }
+
         ctx.fillStyle = '#111'; ctx.fillRect(ox - wW - 10, trY - 10, (wW*2) + 20, 25);
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(ox - wW - 10, trY - 10, (wW*2) + 20, 25);
 
         let headRot = opponent.state === 'hurt' ? -0.2 : (opponent.state === 'windup' ? 0.1 : 0);
+
+        // Neck Muscles (Sternocleidomastoid)
+        ctx.strokeStyle = `rgba(0,0,0,${0.2 * b.muscle})`; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(ox - 15, oy); ctx.lineTo(ox - 25, oy - 30*b.scaleY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + 15, oy); ctx.lineTo(ox + 25, oy - 30*b.scaleY); ctx.stroke();
+
         ctx.save(); ctx.translate(ox, oy - 40 * b.scaleY); ctx.rotate(headRot);
 
         let headGrd = ctx.createRadialGradient(0, -10, 10, 0, 10, 60);
@@ -947,10 +1001,45 @@
         ctx.fillStyle = headGrd;
         
         let hw = 35 * b.jaw; let hh = 50 * b.scaleY; 
+
+        // Ears
+        ctx.fillStyle = skinBase; ctx.strokeStyle = skinDark; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(-hw, 5, 6, 12, -0.2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(hw, 5, 6, 12, 0.2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath(); ctx.ellipse(-hw-1, 5, 2, 6, -0.2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hw+1, 5, 2, 6, 0.2, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = headGrd; // Reset
+
         ctx.beginPath(); ctx.moveTo(-hw, -hh); ctx.quadraticCurveTo(0, -hh - 15, hw, -hh); 
         ctx.bezierCurveTo(hw + 5, -10, hw - 5, 25, hw * 0.6, 35); 
         ctx.quadraticCurveTo(0, 45, -hw * 0.6, 35); 
         ctx.bezierCurveTo(-hw + 5, 25, -hw - 5, -10, -hw, -hh); ctx.fill();
+
+        // Jawline shadow
+        ctx.strokeStyle = skinDark; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(-hw*0.9, 5); ctx.quadraticCurveTo(0, 40, hw*0.9, 5); ctx.stroke();
+
+        // Cheekbones
+        ctx.fillStyle = `rgba(0,0,0,${0.15 * b.scaleY})`;
+        ctx.beginPath(); ctx.ellipse(-hw*0.6, 5, hw*0.3, 8, -0.4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hw*0.6, 5, hw*0.3, 8, 0.4, 0, Math.PI*2); ctx.fill();
+
+        // Facial Hair
+        ctx.fillStyle = b.hairColor || '#111';
+        if (b.facialHair === 'stubble') {
+            ctx.globalAlpha = 0.3;
+            ctx.beginPath(); ctx.moveTo(-hw*0.8, 10); ctx.quadraticCurveTo(0, 45, hw*0.8, 10); ctx.lineTo(hw*0.5, 30); ctx.quadraticCurveTo(0, 35, -hw*0.5, 30); ctx.fill();
+            ctx.globalAlpha = 1.0;
+        } else if (b.facialHair === 'goatee') {
+            ctx.beginPath(); ctx.ellipse(0, 32, 12, 10, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillRect(-8, 20, 16, 5); // mustache
+            ctx.clearRect(-5, 25, 10, 5); // mouth cutout
+        } else if (b.facialHair === 'beard') {
+            ctx.beginPath(); ctx.moveTo(-hw*0.9, 5); ctx.quadraticCurveTo(0, 55, hw*0.9, 5); ctx.lineTo(hw*0.7, 20); ctx.quadraticCurveTo(0, 35, -hw*0.7, 20); ctx.fill();
+            ctx.fillRect(-12, 18, 24, 6); // mustache
+        }
+
 
         // Draw Hair
         ctx.fillStyle = b.hairColor || '#111';
@@ -966,23 +1055,111 @@
         }
 
 
-        if (dmg > 0.3) { ctx.fillStyle = 'rgba(75, 0, 130, 0.4)'; ctx.beginPath(); ctx.ellipse(-20, -15, 15, 10, 0.2, 0, Math.PI*2); ctx.fill(); }
-        if (dmg > 0.7) { ctx.fillStyle = 'rgba(139, 0, 0, 0.5)'; ctx.beginPath(); ctx.ellipse(15, -25, 10, 5, -0.2, 0, Math.PI*2); ctx.fill(); }
+        // Advanced Facial Damage
+        if (dmg > 0.2) {
+            // Swollen left cheek
+            ctx.fillStyle = `rgba(75, 0, 130, ${dmg * 0.5})`;
+            ctx.beginPath(); ctx.ellipse(-20, 5, 12, 18, 0.2, 0, Math.PI*2); ctx.fill();
+        }
+        if (dmg > 0.4) {
+            // Swollen right eye
+            ctx.fillStyle = `rgba(100, 20, 100, ${dmg * 0.7})`;
+            ctx.beginPath(); ctx.ellipse(15, -15, 12, 10, -0.2, 0, Math.PI*2); ctx.fill();
+            // Minor cut on lip
+            ctx.fillStyle = `rgba(180, 0, 0, ${dmg})`;
+            ctx.beginPath(); ctx.ellipse(-5, 18, 4, 1.5, 0.2, 0, Math.PI*2); ctx.fill();
+        }
+        if (dmg > 0.7) {
+            // Deep cut left eyebrow
+            ctx.fillStyle = `rgba(139, 0, 0, ${dmg})`;
+            ctx.beginPath(); ctx.ellipse(-20, -25, 8, 2.5, -0.2, 0, Math.PI*2); ctx.fill();
+            // Blood dripping from eyebrow
+            ctx.strokeStyle = `rgba(150, 0, 0, ${dmg * 0.8})`; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-20, -25); ctx.quadraticCurveTo(-22, -15, -20, -5); ctx.stroke();
+            // Cut on right cheek
+            ctx.fillStyle = `rgba(160, 0, 0, ${dmg})`;
+            ctx.beginPath(); ctx.ellipse(20, -5, 6, 2, 0.5, 0, Math.PI*2); ctx.fill();
+        }
+        if (dmg > 0.9) {
+            // Very swollen left eye
+            ctx.fillStyle = `rgba(50, 10, 50, 0.9)`;
+            ctx.beginPath(); ctx.ellipse(-15, -12, 10, 12, 0, 0, Math.PI*2); ctx.fill();
+        }
 
-        ctx.fillStyle = '#111'; let eyeY = -15 * b.scaleY; let ew = 25 * b.jaw;
+        let eyeY = -10 * b.scaleY; let ew = 22 * b.jaw;
+
+        // Eye bags / Bruising
+        if (dmg > 0.1) {
+            ctx.fillStyle = `rgba(50, 0, 50, ${Math.min(0.6, dmg)})`;
+            ctx.beginPath(); ctx.ellipse(-15, eyeY + 6, 8, 4, 0.2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(15, eyeY + 6, 8, 4, -0.2, 0, Math.PI*2); ctx.fill();
+        }
+
+
+        // Nose
+        ctx.fillStyle = skinDark;
+        ctx.beginPath(); ctx.moveTo(0, eyeY + 5); ctx.lineTo(-6, eyeY + 22); ctx.lineTo(6, eyeY + 22); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; // Nostrils
+        ctx.beginPath(); ctx.ellipse(-4, eyeY + 24, 3, 1.5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(4, eyeY + 24, 3, 1.5, 0, 0, Math.PI*2); ctx.fill();
+        // Nose highlight
+        ctx.strokeStyle = skinHigh; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, eyeY + 5); ctx.lineTo(0, eyeY + 20); ctx.stroke();
+
+        let mouthY = 18;
         if (opponent.state === 'windup') { 
-            ctx.beginPath(); ctx.moveTo(-ew, eyeY-8); ctx.lineTo(-10, eyeY+2); ctx.lineTo(-ew, eyeY+2); ctx.fill(); 
-            ctx.beginPath(); ctx.moveTo(ew, eyeY-8); ctx.lineTo(10, eyeY+2); ctx.lineTo(ew, eyeY+2); ctx.fill();   
-            ctx.fillStyle = '#eee'; ctx.fillRect(-10, 15, 20, 5); ctx.strokeStyle='#000'; ctx.strokeRect(-10, 15, 20, 5);
+            // Angry eyes
+            ctx.fillStyle = '#fff'; // sclera
+            ctx.beginPath(); ctx.ellipse(-15, eyeY, 6, 3, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(15, eyeY, 6, 3, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000'; // pupil
+            ctx.beginPath(); ctx.arc(-15, eyeY, 2.5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(15, eyeY, 2.5, 0, Math.PI*2); ctx.fill();
+            // Eyebrows furrowed
+            ctx.strokeStyle = '#111'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(-25, eyeY-5); ctx.lineTo(-10, eyeY+2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(25, eyeY-5); ctx.lineTo(10, eyeY+2); ctx.stroke();
+
+            // Angry open mouth
+            ctx.fillStyle = '#222'; // inside mouth
+            ctx.beginPath(); ctx.ellipse(0, mouthY+4, 12, 6, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#eee'; // teeth
+            ctx.fillRect(-8, mouthY, 16, 3);
+            ctx.fillRect(-6, mouthY+7, 12, 2);
         } else if (opponent.state === 'hurt' || (kd.active && kd.fighter==='opponent')) { 
-            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-15, eyeY, 8, 0, Math.PI*2); ctx.arc(15, eyeY, 8, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(-15, eyeY, 3, 0, Math.PI*2); ctx.arc(15, eyeY, 3, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#333'; ctx.beginPath(); ctx.ellipse(0, 20, 12, 18, 0, 0, Math.PI*2); ctx.fill(); 
+            // Hurt eyes (wide)
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(-15, eyeY, 6, 0, Math.PI*2); ctx.arc(15, eyeY, 6, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(-15, eyeY, 2.5, 0, Math.PI*2); ctx.arc(15, eyeY, 2.5, 0, Math.PI*2); ctx.fill();
+            // Eyebrows raised
+            ctx.strokeStyle = '#111'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(-22, eyeY-8); ctx.quadraticCurveTo(-15, eyeY-12, -8, eyeY-6); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(22, eyeY-8); ctx.quadraticCurveTo(15, eyeY-12, 8, eyeY-6); ctx.stroke();
+
+            // Hurt mouth
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.ellipse(0, mouthY+6, 10, 12, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#900'; // blood/tongue
+            ctx.beginPath(); ctx.ellipse(0, mouthY+12, 6, 4, 0, 0, Math.PI*2); ctx.fill();
         } else { 
-            ctx.beginPath(); ctx.arc(-15, eyeY, 4, 0, Math.PI*2); ctx.arc(15, eyeY, 4, 0, Math.PI*2); ctx.fill();
-            ctx.strokeStyle = '#111'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(-22, eyeY-5); ctx.lineTo(-10, eyeY-3); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(22, eyeY-5); ctx.lineTo(10, eyeY-3); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(-10, 20); ctx.lineTo(10, 20); ctx.stroke(); 
+            // Normal eyes
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.ellipse(-15, eyeY, 5, 2.5, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(15, eyeY, 5, 2.5, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#111';
+            ctx.beginPath(); ctx.arc(-15, eyeY, 2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(15, eyeY, 2, 0, Math.PI*2); ctx.fill();
+            // Eyebrows
+            ctx.strokeStyle = '#111'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(-22, eyeY-6); ctx.quadraticCurveTo(-15, eyeY-8, -8, eyeY-5); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(22, eyeY-6); ctx.quadraticCurveTo(15, eyeY-8, 8, eyeY-5); ctx.stroke();
+
+            // Normal mouth
+            ctx.fillStyle = mixColor(skinDark, '#500', 0.4); // Lips
+            ctx.beginPath(); ctx.ellipse(0, mouthY+2, 10, 3, 0, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-10, mouthY+2); ctx.quadraticCurveTo(0, mouthY+4, 10, mouthY+2); ctx.stroke();
         }
         ctx.restore(); 
 
@@ -1012,6 +1189,25 @@
         ctx.strokeStyle = skinDark; ctx.lineWidth = 35 * b.muscle; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(ox - sW + 5, oy + 20); ctx.lineTo(lx, ly-10); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(ox + sW - 5, oy + 20); ctx.lineTo(rx, ry-10); ctx.stroke();
+
+        // Bicep/Tricep muscle definition lines
+        ctx.strokeStyle = `rgba(0,0,0,${0.3 * b.muscle})`; ctx.lineWidth = 4 * b.muscle;
+
+        // Left arm muscles
+        let midLx = (ox - sW + 5 + lx) / 2; let midLy = (oy + 20 + ly - 10) / 2;
+        let lAngle = Math.atan2((ly - 10) - (oy + 20), lx - (ox - sW + 5));
+        ctx.save(); ctx.translate(midLx, midLy); ctx.rotate(lAngle);
+        ctx.beginPath(); ctx.moveTo(-15, -8); ctx.quadraticCurveTo(0, -15, 15, -8); ctx.stroke(); // Bicep bump
+        ctx.beginPath(); ctx.moveTo(-15, 8); ctx.quadraticCurveTo(0, 15, 15, 8); ctx.stroke();  // Tricep bump
+        ctx.restore();
+
+        // Right arm muscles
+        let midRx = (ox + sW - 5 + rx) / 2; let midRy = (oy + 20 + ry - 10) / 2;
+        let rAngle = Math.atan2((ry - 10) - (oy + 20), rx - (ox + sW - 5));
+        ctx.save(); ctx.translate(midRx, midRy); ctx.rotate(rAngle);
+        ctx.beginPath(); ctx.moveTo(-15, -8); ctx.quadraticCurveTo(0, -15, 15, -8); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-15, 8); ctx.quadraticCurveTo(0, 15, 15, 8); ctx.stroke();
+        ctx.restore();
 
         drawDetailedGlove(lx, ly, rL, opponent.color);
         drawDetailedGlove(rx, ry, rR, opponent.color);
@@ -1068,6 +1264,15 @@
         
         ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = r * 0.08; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(x - r*0.3, y - r*0.2); ctx.quadraticCurveTo(x, y + r*0.6, x + r*0.5, y + r*0.2); ctx.stroke();
+
+        // Glove wrinkles and texture
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = r * 0.04;
+        ctx.beginPath(); ctx.moveTo(x - r*0.4, y); ctx.quadraticCurveTo(x, y + r*0.2, x + r*0.2, y - r*0.1); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - r*0.2, y + r*0.3); ctx.quadraticCurveTo(x + r*0.2, y + r*0.4, x + r*0.6, y + r*0.1); ctx.stroke();
+
+        // Shine/Reflection on leather
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.beginPath(); ctx.ellipse(x - r*0.3, y - r*0.4, r*0.3, r*0.15, -0.4, 0, Math.PI*2); ctx.fill();
         ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = r * 0.05;
         ctx.beginPath(); ctx.ellipse(x, y - r*0.7, r*0.6, r*0.2, -0.2, 0, Math.PI); ctx.stroke();
     }
