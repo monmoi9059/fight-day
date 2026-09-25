@@ -907,6 +907,14 @@
         
         ctx.shadowColor = 'rgba(0, 150, 255, 0.4)'; ctx.shadowBlur = 20;
 
+        // Solid Neck Base (Drawn before torso so torso overlaps it)
+        let neckWidth = 35 * b.scaleX * b.muscle;
+        let neckHeight = 45 * b.scaleY;
+        let neckGrd = ctx.createLinearGradient(ox - neckWidth, oy, ox + neckWidth, oy);
+        neckGrd.addColorStop(0, skinDark); neckGrd.addColorStop(0.5, skinBase); neckGrd.addColorStop(1, skinDark);
+        ctx.fillStyle = neckGrd;
+        ctx.fillRect(ox - neckWidth, oy - neckHeight, neckWidth * 2, neckHeight + 60);
+
         let bodyGrd = ctx.createRadialGradient(ox, oy+80, 20, ox, oy+100, 140);
         bodyGrd.addColorStop(0, skinHigh); bodyGrd.addColorStop(0.3, skinBase); bodyGrd.addColorStop(1, skinDark);
         ctx.fillStyle = bodyGrd;
@@ -1035,14 +1043,6 @@
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(ox - wW - 10, trY - 10, (wW*2) + 20, 25);
 
         let headRot = opponent.state === 'hurt' ? -0.2 : (opponent.state === 'windup' ? 0.1 : 0);
-
-        // Solid Neck Base
-        let neckWidth = 35 * b.scaleX * b.muscle;
-        let neckHeight = 45 * b.scaleY;
-        let neckGrd = ctx.createLinearGradient(ox - neckWidth, oy, ox + neckWidth, oy);
-        neckGrd.addColorStop(0, skinDark); neckGrd.addColorStop(0.5, skinBase); neckGrd.addColorStop(1, skinDark);
-        ctx.fillStyle = neckGrd;
-        ctx.fillRect(ox - neckWidth, oy - neckHeight, neckWidth * 2, neckHeight + 10);
 
         // Neck Muscles (Sternocleidomastoid)
         ctx.strokeStyle = `rgba(0,0,0,${0.2 * b.muscle})`; ctx.lineWidth = 3;
