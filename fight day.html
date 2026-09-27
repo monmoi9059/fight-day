@@ -406,25 +406,26 @@
         if (gameState === 'KNOCKDOWN' && kd.fighter === 'player' && k === ' ') { mashRecovery(); return; }
         if (gameState !== 'FIGHT') return;
         if (k === 'shift') keys.shift = true;
+        if (k === 'q') keys.q = true;
+        if (k === 'e') keys.e = true;
         if (k === 'arrowleft') keys.arrowleft = true;
         if (k === 'arrowright') keys.arrowright = true;
         if (k === 'arrowup') keys.arrowup = true;
         if (k === 'arrowdown') keys.arrowdown = true;
         handlePunchInput();
         if (k === 'w') keys.w = true; if (k === 's') keys.s = true; if (k === 'a') keys.a = true; if (k === 'd') keys.d = true;
-        if (k === 'q' && !keys.q) { keys.q = true; actions.dodgeLeft = true; }
-        if (k === 'e' && !keys.e) { keys.e = true; actions.dodgeRight = true; }
     });
     window.addEventListener('keyup', e => {
         let k = e.key.toLowerCase();
         if (k === 'shift') keys.shift = false;
+        if (k === 'q') keys.q = false;
+        if (k === 'e') keys.e = false;
         if (k === 'arrowleft') keys.arrowleft = false;
         if (k === 'arrowright') keys.arrowright = false;
         if (k === 'arrowup') keys.arrowup = false;
         if (k === 'arrowdown') keys.arrowdown = false;
         handlePunchInput();
         if (k === 'w') keys.w = false; if (k === 's') keys.s = false; if (k === 'a') keys.a = false; if (k === 'd') keys.d = false;
-        if (k === 'q') keys.q = false; if (k === 'e') keys.e = false;
     });
     
     canvas.addEventListener('mousemove', e => {
@@ -455,32 +456,27 @@
             player.isBlocking = false;
             if (player.exhausted || player.dodgeState !== 'none') return;
 
-            let modShift = keys.shift;
-            let modQ = keys.q;
-            let modE = keys.e;
+            let modShift = keys.q;
+            let modQ = keys.shift;
 
             if (keys.arrowup && player.arms.right.state === 'idle') {
                 if (modShift) launchPunch('right', 'gazelle_punch'); // Signature
                 else if (modQ) launchPunch('right', 'flicker_jab'); // Thomas Hearns
-                else if (modE) launchPunch('right', 'overhand');
                 else launchPunch('right', 'overhead');
             }
             else if (keys.arrowdown && player.arms.right.state === 'idle') {
                 if (modShift) launchPunch('right', 'bolo'); // Sugar Ray Leonard / Kid Gavilan
                 else if (modQ) launchPunch('left', 'lead_uppercut');
-                else if (modE) launchPunch('right', 'shovel_hook');
                 else launchPunch('right', 'uppercut');
             }
             else if (keys.arrowleft && player.arms.left.state === 'idle') {
                 if (modShift) launchPunch('left', 'smash'); // Donovan Ruddock
                 else if (modQ) launchPunch('left', 'jab');
-                else if (modE) launchPunch('left', 'liver_shot'); // Micky Ward
                 else launchPunch('left', 'straight');
             }
             else if (keys.arrowright && player.arms.right.state === 'idle') {
                 if (modShift) launchPunch('right', 'haymaker');
                 else if (modQ) launchPunch('right', 'pull_counter'); // Floyd Mayweather
-                else if (modE) launchPunch('right', 'body_hook');
                 else launchPunch('right', 'cross');
             }
         }
@@ -515,8 +511,11 @@
         arm.progress = 0;
         arm.punchType = punchType;
 
-        let tx = view.crossX + (Math.random() - 0.5) * spread * 2;
-        let ty = view.crossY + (Math.random() - 0.5) * spread * 2;
+        let headY = view.screenY + ((opponent.localY - 50 * opponent.build.scaleY) * view.scale);
+        let bodyY = view.screenY + ((opponent.localY + 70 * opponent.build.scaleY) * view.scale);
+
+        let tx = view.screenX + (opponent.localX * view.scale) + (Math.random() - 0.5) * spread * 2;
+        let ty = (keys.e ? bodyY : headY) + (Math.random() - 0.5) * spread * 2;
 
         if (punchType === 'overhead' || punchType === 'heavy_overhead') {
             ty -= 50;
@@ -532,7 +531,7 @@
 
         if (opponent.state === 'idle' && Math.random() < Math.min(dodgeChance, 0.8)) {
             opponent.state = 'dodging';
-            if (view.crossY < view.screenY - 20) opponent.dodgeDir = (Math.random() < 0.3) ? 2 : (side === 'left' ? 1 : -1);
+            if (ty < view.screenY - 20) opponent.dodgeDir = (Math.random() < 0.3) ? 2 : (side === 'left' ? 1 : -1);
             else opponent.dodgeDir = Math.random() > 0.5 ? 1 : -1; 
             opponent.stateTimer = 350; 
         }
