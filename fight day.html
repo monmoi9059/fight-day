@@ -1318,42 +1318,84 @@
     function drawPlayerDetailed() {
         if (player.isBlocking) { drawDetailedGlove(350, 500, 140, player.color); drawDetailedGlove(674, 500, 140, player.color); return; }
 
+        let skinBase = player.skin.base;
+        let skinDark = player.skin.dark;
+        let skinHigh = player.skin.high;
+
+        let dodgeX = -player.dodgeOffset * 0.4;
+        let dodgeY = Math.abs(player.dodgeOffset) * 0.1;
+
+        // Draw Player Shoulders/Torso Silhouette
+        ctx.fillStyle = skinBase;
+        ctx.strokeStyle = skinDark;
+        ctx.lineWidth = 15;
+        ctx.lineJoin = 'round';
+
+        // Left shoulder
+        ctx.beginPath();
+        ctx.moveTo(0, 768);
+        ctx.quadraticCurveTo(150 + dodgeX, 650 + dodgeY, 250 + dodgeX, 768);
+        ctx.fill(); ctx.stroke();
+
+        // Right shoulder
+        ctx.beginPath();
+        ctx.moveTo(1024, 768);
+        ctx.quadraticCurveTo(874 + dodgeX, 650 + dodgeY, 774 + dodgeX, 768);
+        ctx.fill(); ctx.stroke();
+
         ['left', 'right'].forEach(side => {
             let arm = player.arms[side];
-            let baseX = side === 'left' ? 250 : 774; let baseY = 750;
+
+            let thrustX = arm.state === 'punching' ? Math.sin(arm.progress * Math.PI) * (side === 'left' ? 30 : -30) : 0;
+            let thrustY = arm.state === 'punching' ? -Math.sin(arm.progress * Math.PI) * 30 : 0;
+
+            let baseX = (side === 'left' ? 250 : 774) + dodgeX + thrustX;
+            let baseY = 750 + dodgeY + thrustY;
+
             let ease = arm.state === 'punching' ? 1 - Math.pow(1 - arm.progress, 4) : arm.progress; 
-            let cx = baseX + (arm.targetX - baseX) * ease; let cy = baseY + (arm.targetY - baseY) * ease;
+            let cx = baseX + (arm.targetX - baseX) * ease;
+            let cy = baseY + (arm.targetY - baseY) * ease;
+
+            // Elbow calculations for jointed arms
+            let elbowX = baseX + (cx - baseX) * 0.5;
+            let elbowY = baseY + (cy - baseY) * 0.5 + 50;
 
             // Apply different animations based on punch type
             if (arm.punchType === 'overhead' || arm.punchType === 'heavy_overhead' || arm.punchType === 'overhand') {
                 cy -= Math.sin(arm.progress * Math.PI) * (arm.punchType === 'heavy_overhead' ? 220 : 180);
                 if (arm.punchType === 'heavy_overhead' || arm.punchType === 'overhand') cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 50;
+                elbowY -= Math.sin(arm.progress * Math.PI) * 150;
+                elbowX += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 100;
             } else if (arm.punchType === 'uppercut' || arm.punchType === 'bolo' || arm.punchType === 'lead_uppercut') {
                 cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 200 : 150);
                 cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 120 : 80);
+                elbowY += Math.sin(arm.progress * Math.PI) * 100;
             } else if (arm.punchType === 'haymaker') {
-                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200; // Super wide hook/haymaker
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200;
                 cy -= Math.sin(arm.progress * Math.PI) * 30;
+                elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200;
             } else if (arm.punchType === 'body_hook' || arm.punchType === 'shovel_hook' || arm.punchType === 'liver_shot') {
                 cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 160 : 120);
                 cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 140 : 100);
+                elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 150;
+                elbowY += Math.sin(arm.progress * Math.PI) * 80;
             } else if (arm.punchType === 'jab' || arm.punchType === 'cross' || arm.punchType === 'straight') {
-                // straight line with slight torque
                 cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 20;
                 cy -= Math.sin(arm.progress * Math.PI) * 10;
             } else if (arm.punchType === 'flicker_jab') {
                 cy += Math.sin(arm.progress * Math.PI) * 80;
                 cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 40;
+                elbowY += Math.sin(arm.progress * Math.PI) * 120;
             } else if (arm.punchType === 'smash') {
-                // Ruddock's Smash - hybrid hook/uppercut
                 cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 140;
                 cy += Math.sin(arm.progress * Math.PI) * 100;
+                elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 120;
+                elbowY += Math.sin(arm.progress * Math.PI) * 120;
             } else if (arm.punchType === 'gazelle_punch') {
-                // Gazelle Punch - leaping hook
                 cy -= Math.sin(arm.progress * Math.PI) * 50;
                 cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 100;
+                elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 100;
             } else if (arm.punchType === 'pull_counter') {
-                // Pull counter - leans back slightly then strikes straight
                 if (arm.progress < 0.3) {
                     cy += 20; cx += (side === 'left' ? -1 : 1) * 30;
                 } else {
@@ -1364,40 +1406,31 @@
 
             let radius = 120 - (ease * 65); 
 
-            if (arm.progress > 0) {
-                let skinBase = player.skin.base;
-                let skinDark = player.skin.dark;
-                let skinHigh = player.skin.high;
-
+            if (arm.progress > 0 || arm.state === 'idle') {
                 // Shadow / Outline
                 ctx.strokeStyle = skinDark; ctx.globalAlpha = 1.0; ctx.lineWidth = radius * 1.6; ctx.lineCap = 'round';
-                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.lineTo(cx, cy); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.quadraticCurveTo(elbowX, elbowY, cx, cy); ctx.stroke();
 
                 // Base skin color
                 ctx.strokeStyle = skinBase; ctx.lineWidth = radius * 1.3;
-                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.lineTo(cx, cy); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.quadraticCurveTo(elbowX, elbowY, cx, cy); ctx.stroke();
 
                 // Highlight
                 ctx.strokeStyle = skinHigh; ctx.lineWidth = radius * 0.5; ctx.globalAlpha = 0.6;
-                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.lineTo(cx, cy); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.quadraticCurveTo(elbowX, elbowY, cx, cy); ctx.stroke();
                 ctx.globalAlpha = 1.0;
 
                 // Muscle definition (Bicep/Forearm crease)
-                let midX = (baseX + cx) / 2;
-                let midY = (baseY + cy) / 2;
-                let angle = Math.atan2(cy - baseY, cx - baseX);
-
                 ctx.save();
-                ctx.translate(midX, midY);
+                ctx.translate(elbowX, elbowY);
+                let angle = Math.atan2(cy - elbowY, cx - elbowX);
                 ctx.rotate(angle);
-                ctx.strokeStyle = `rgba(0,0,0,0.25)`; ctx.lineWidth = radius * 0.15;
-                // Draw a subtle curved crease for the inner elbow/bicep
+                ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = radius * 0.15;
                 ctx.beginPath(); ctx.moveTo(-radius * 0.2, -radius * 0.5); ctx.quadraticCurveTo(0, 0, -radius * 0.2, radius * 0.5); ctx.stroke();
                 ctx.restore();
             }
 
             if (arm.state === 'idle') { cx += Math.sin(Date.now()*0.003 + (side==='left'?0:Math.PI))*12; cy += Math.cos(Date.now()*0.004)*12; }
-            cx -= player.dodgeOffset * 0.4; cy += Math.abs(player.dodgeOffset) * 0.1;
 
             drawDetailedGlove(cx, cy, radius, player.color);
         });
