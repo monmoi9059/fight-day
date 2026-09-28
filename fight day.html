@@ -44,8 +44,9 @@
         
         .form-group { margin: 10px 0; width: 350px; }
         .form-group label { display: block; font-size: 14px; color: #dcdde1; text-transform: uppercase; margin-bottom: 6px; font-weight: bold; letter-spacing: 1px; }
-        .form-group input { width: 100%; padding: 12px; font-size: 18px; font-weight: bold; background: rgba(0,0,0,0.5); color: #fff; border: 2px solid #555; border-radius: 6px; box-sizing: border-box; transition: 0.2s; }
-        .form-group input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 15px rgba(232, 65, 24, 0.3); }
+        .form-group input, .form-group select { -webkit-appearance: none; -moz-appearance: none; appearance: none;  width: 100%; padding: 12px; font-size: 18px; font-weight: bold; background: rgba(0,0,0,0.5); color: #fff; border: 2px solid #555; border-radius: 6px; box-sizing: border-box; transition: 0.2s; }
+        .form-group input:focus, .form-group select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 15px rgba(232, 65, 24, 0.3); }
+        .form-group select option { background: rgba(20,20,25,0.95); color: #fff; }
         
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; width: 95%; max-width: 900px; margin: 20px 0; }
         .stat-card { background: var(--panel); padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #2f3640; box-shadow: 0 5px 15px rgba(0,0,0,0.5); position: relative; overflow: hidden; }
@@ -110,6 +111,35 @@
         <div class="form-group"><label>Fighter Name</label><input type="text" id="playerName" value="Pierre-Luc"></div>
         <div class="form-group"><label>Hometown</label><input type="text" id="playerHometown" value="Lévis, Quebec"></div>
         <div class="form-group"><label>Glove Color</label><input type="color" id="playerColor" value="#e84118" style="padding:0; height:50px;"></div>
+        <div class="form-group">
+            <label>Stance (Handedness)</label>
+            <select id="playerStance">
+                <option value="orthodox">Orthodox (Righty)</option>
+                <option value="southpaw">Southpaw (Lefty)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Combat Style</label>
+            <select id="playerCombatStyle">
+                <option value="outboxer">Outboxer</option>
+                <option value="inside_puncher">Inside Puncher</option>
+                <option value="peekaboo">Peek-A-Boo</option>
+                <option value="showboat">Showboat (Prince Naseem)</option>
+                <option value="mayweather">Mayweather Money Style</option>
+                <option value="slugger">Slugger / Brawler</option>
+                <option value="hitman">Hitman (Hearns Style)</option>
+                <option value="swarmer">Swarmer (Pressure)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Blocking Style</label>
+            <select id="playerBlockStyle">
+                <option value="normal">Normal Blocking</option>
+                <option value="philly_shell">Philly Shell</option>
+                <option value="high_guard">High Guard</option>
+                <option value="cross_armed">Cross-Armed Guard</option>
+            </select>
+        </div>
         <button onclick="startCareer()" style="margin-top: 30px;">Enter Gym</button>
     </div>
 
@@ -176,6 +206,7 @@
         name: "Contender", color: "#e84118", money: 0, wins: 0, losses: 0, rank: 100,
         skin: { base: "#e1b182", dark: "#9c6d42", high: "#fcdbb8" },
         stats: { power: 10, speed: 10, defense: 10, stamina: 10, accuracy: 10, reach: 10, heart: 10 },
+        handedness: 'orthodox', combatStyle: 'outboxer', blockStyle: 'normal',
         hp: 100, maxHp: 100, sta: 100, maxSta: 100, isBlocking: false, exhausted: false, knockdowns: 0,
         worldX: 0, worldZ: 0, dodgeState: 'none', dodgeTimer: 0, dodgeOffset: 0, tilt: 0, counterWindow: 0, leanX: 0, leanY: 0,
         arms: { left: { state: 'idle', progress: 0, targetX: 0, targetY: 0 }, right: { state: 'idle', progress: 0, targetX: 0, targetY: 0 } }
@@ -203,6 +234,22 @@
     function startCareer() {
         player.name = document.getElementById('playerName').value || "Fighter";
         player.color = document.getElementById('playerColor').value;
+        player.handedness = document.getElementById('playerStance').value;
+        player.combatStyle = document.getElementById('playerCombatStyle').value;
+        player.blockStyle = document.getElementById('playerBlockStyle').value;
+
+        if (player.combatStyle === 'outboxer') { player.stats.speed += 2; player.stats.reach += 2; player.stats.power -= 2; }
+        else if (player.combatStyle === 'inside_puncher') { player.stats.power += 2; player.stats.heart += 2; player.stats.reach -= 2; }
+        else if (player.combatStyle === 'peekaboo') { player.stats.speed += 2; player.stats.power += 2; player.stats.stamina -= 2; }
+        else if (player.combatStyle === 'showboat') { player.stats.speed += 3; player.stats.defense -= 3; }
+        else if (player.combatStyle === 'mayweather') { player.stats.defense += 2; player.stats.accuracy += 2; player.stats.power -= 2; }
+        else if (player.combatStyle === 'slugger') { player.stats.power += 3; player.stats.speed -= 2; player.stats.accuracy -= 1; }
+        else if (player.combatStyle === 'hitman') { player.stats.reach += 3; player.stats.power += 1; player.stats.defense -= 2; }
+        else if (player.combatStyle === 'swarmer') { player.stats.stamina += 3; player.stats.heart += 1; player.stats.reach -= 2; }
+
+        if (player.blockStyle === 'philly_shell') { player.stats.defense += 2; player.stats.stamina -= 2; }
+        else if (player.blockStyle === 'high_guard') { player.stats.defense += 2; player.stats.speed -= 2; }
+        else if (player.blockStyle === 'cross_armed') { player.stats.defense += 3; player.stats.speed -= 2; player.stats.accuracy -= 1; }
         generateOpponent(player.rank - 1);
         showUI('menu-hub'); 
         updateHubUI();
@@ -1316,7 +1363,27 @@
     }
 
     function drawPlayerDetailed() {
-        if (player.isBlocking) { drawDetailedGlove(350, 500, 140, player.color); drawDetailedGlove(674, 500, 140, player.color); return; }
+        if (player.isBlocking) {
+            if (player.blockStyle === 'philly_shell') {
+                if (player.handedness === 'orthodox') {
+                    drawDetailedGlove(512, 600, 140, player.color); // Left arm low across body
+                    drawDetailedGlove(674, 450, 140, player.color); // Right hand high
+                } else {
+                    drawDetailedGlove(350, 450, 140, player.color); // Left hand high
+                    drawDetailedGlove(512, 600, 140, player.color); // Right arm low across body
+                }
+            } else if (player.blockStyle === 'high_guard') {
+                drawDetailedGlove(450, 420, 140, player.color); // Left very high
+                drawDetailedGlove(574, 420, 140, player.color); // Right very high
+            } else if (player.blockStyle === 'cross_armed') {
+                drawDetailedGlove(600, 550, 140, player.color); // Left crossed right
+                drawDetailedGlove(424, 550, 140, player.color); // Right crossed left
+            } else {
+                drawDetailedGlove(350, 500, 140, player.color);
+                drawDetailedGlove(674, 500, 140, player.color);
+            }
+            return;
+        }
 
         let skinBase = player.skin.base;
         let skinDark = player.skin.dark;
@@ -1332,15 +1399,17 @@
         ctx.lineJoin = 'round';
 
         // Left shoulder
+        let leftShoulderY = (player.handedness === 'orthodox') ? 600 : 650;
         ctx.beginPath();
         ctx.moveTo(0, 768);
-        ctx.quadraticCurveTo(150 + dodgeX, 650 + dodgeY, 250 + dodgeX, 768);
+        ctx.quadraticCurveTo(150 + dodgeX, leftShoulderY + dodgeY, 250 + dodgeX, 768);
         ctx.fill(); ctx.stroke();
 
         // Right shoulder
+        let rightShoulderY = (player.handedness === 'southpaw') ? 600 : 650;
         ctx.beginPath();
         ctx.moveTo(1024, 768);
-        ctx.quadraticCurveTo(874 + dodgeX, 650 + dodgeY, 774 + dodgeX, 768);
+        ctx.quadraticCurveTo(874 + dodgeX, rightShoulderY + dodgeY, 774 + dodgeX, 768);
         ctx.fill(); ctx.stroke();
 
         ['left', 'right'].forEach(side => {
@@ -1351,6 +1420,42 @@
 
             let baseX = (side === 'left' ? 250 : 774) + dodgeX + thrustX;
             let baseY = 750 + dodgeY + thrustY;
+
+            // Apply idle positions based on style and handedness
+            if (arm.state === 'idle') {
+                if (player.combatStyle === 'peekaboo') {
+                    baseX = (side === 'left' ? 450 : 574) + dodgeX;
+                    baseY = 600 + dodgeY;
+                } else if (player.combatStyle === 'showboat') {
+                    baseX = (side === 'left' ? 150 : 874) + dodgeX;
+                    baseY = 850 + dodgeY;
+                } else if (player.combatStyle === 'mayweather') {
+                    if (player.handedness === 'orthodox') {
+                        if (side === 'left') { baseX = 450 + dodgeX; baseY = 780 + dodgeY; } // Low across
+                        else { baseX = 700 + dodgeX; baseY = 650 + dodgeY; } // High near face
+                    } else {
+                        if (side === 'right') { baseX = 574 + dodgeX; baseY = 780 + dodgeY; }
+                        else { baseX = 324 + dodgeX; baseY = 650 + dodgeY; }
+                    }
+                } else if (player.combatStyle === 'inside_puncher') {
+                    baseX = (side === 'left' ? 350 : 674) + dodgeX;
+                    baseY = 650 + dodgeY;
+                } else if (player.combatStyle === 'slugger') {
+                    baseX = (side === 'left' ? 180 : 844) + dodgeX;
+                    baseY = 780 + dodgeY; // Wide and low
+                } else if (player.combatStyle === 'hitman') {
+                    if (player.handedness === 'orthodox') {
+                        if (side === 'left') { baseX = 200 + dodgeX; baseY = 800 + dodgeY; } // Flicker jab low
+                        else { baseX = 650 + dodgeX; baseY = 620 + dodgeY; } // High rear guard
+                    } else {
+                        if (side === 'right') { baseX = 824 + dodgeX; baseY = 800 + dodgeY; }
+                        else { baseX = 374 + dodgeX; baseY = 620 + dodgeY; }
+                    }
+                } else if (player.combatStyle === 'swarmer') {
+                    baseX = (side === 'left' ? 400 : 624) + dodgeX;
+                    baseY = 630 + dodgeY; // Tight and high
+                }
+            }
 
             let ease = arm.state === 'punching' ? 1 - Math.pow(1 - arm.progress, 4) : arm.progress; 
             let cx = baseX + (arm.targetX - baseX) * ease;

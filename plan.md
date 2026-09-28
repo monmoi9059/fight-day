@@ -1,17 +1,26 @@
-1. **Remove Mouse Targeting**:
-   - Modify `view.crossX` and `view.crossY` to map entirely to screen center (`512`, `384`) + player sway/lean + opponent tracking, ignoring `mouse.x` and `mouse.y`.
-   - Remove `mousemove`, `mousedown`, `mouseup` listeners related to targeting.
-   - Refactor `launchPunch` target generation: Rather than targeting a mouse crosshair, target the opponent's head or body directly based on punch type, factoring in player's accuracy.
+1. **Modify HTML UI**:
+   - Add dropdown for `Stance (Handedness)`: Orthodox (Righty), Southpaw (Lefty).
+   - Add dropdown for `Combat Style`: Outboxer, Inside Puncher, Peek-A-Boo, Showboat, Mayweather Money Style.
+   - Add dropdown for `Blocking Style`: Normal, Philly Shell.
+   - Update CSS to support `select` elements in `.form-group`.
 
-2. **Q and E as Punch Modifiers**:
-   - The user requested "add Q an E as modifiers for punches for more punching styles". Currently Q and E are used for dodging (`actions.dodgeLeft` / `actions.dodgeRight`). We need to move dodge to something else (maybe double tap A/D or just remove it in favor of lean, or map dodging to something else like Z and C, but let's just make Q/E modifiers). Wait, the prompt specifically asks to "add Q and E as modifiers for punches". We should unbind them from dodge, or map dodge to something else like Spacebar + A/D. Let's map dodge to Shift + A/D maybe? The lean is currently Shift + WASD. We can map Dodge to double-tap, or simply use `Z` and `C` for dodge, or `Space + A/D`. Let's just remove Dodge from Q/E and make Q/E modifiers in `handlePunchInput()`.
-   - Add new punch types handling in `launchPunch` and `drawPlayerDetailed` to reflect these new styles. (e.g. `jab`, `cross`, `hook`, `body_hook`, `uppercut`, `bolo`, `overhand`, `shovel_hook`).
+2. **Update Game State (`player` object)**:
+   - Add `handedness`, `combatStyle`, `blockStyle` to the `player` object with default values.
 
-3. **Details and Realism in Movements**:
-   - Add head bobbing/breathing animation in the update loop (sine waves to `player.worldY` or camera `screenY`).
-   - Opponent realistic movement (add a subtle sway or bob to the opponent).
-   - In `drawPlayerDetailed`, add more dynamic animations for the new punch types.
-   - Make the `view.dist` effect on camera field of view more dramatic.
+3. **Apply Stats Effects on Career Start**:
+   - In `startCareer()`, read values from the dropdowns and set them on `player`.
+   - Apply base stats modifiers based on the chosen combat style and block style.
 
-4. **Pre-commit checks**:
-   - Ensure the new logic doesn't break the existing rendering and fight loop. Verify with test file.
+4. **Visual Updates (`drawPlayerDetailed`)**:
+   - Adjust `leftShoulderY/X` and `rightShoulderY/X` based on `player.handedness` to show the weak side shoulder forward (closer/more prominent).
+   - Adjust idle hand positions (`baseX`, `baseY`) based on `player.combatStyle` (e.g., high for Peek-A-Boo, low for Showboat, asymmetric for Mayweather).
+   - Adjust blocking visual positions based on `player.blockStyle` (Philly Shell vs Normal).
+
+5. **Verify Changes**:
+   - Start a python server, verify the UI displays correctly.
+   - Verify styles affect stats.
+   - Verify visuals adjust when stances and styles are changed.
+
+6. **Pre-commit Steps**: Ensure tests/verifications/reviews pass using `pre_commit_instructions`.
+
+7. **Submit Code**: Once verified, submit.
