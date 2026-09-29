@@ -948,25 +948,77 @@
     }
 
     function drawRing3D() {
-        let camX = player.worldX * -1.0; let camZ = player.worldZ * -1.0;
-        let bgGrd = ctx.createLinearGradient(0, 450, 0, 768);
+        let cx = player.worldX;
+        let cz = player.worldZ;
+        let cy = -120;
+        let fov = 350;
+        let horizon = 384;
+
+        let bgGrd = ctx.createLinearGradient(0, horizon - 100, 0, 768);
         bgGrd.addColorStop(0, '#11131a'); bgGrd.addColorStop(1, '#2c3e50');
-        ctx.fillStyle = bgGrd; ctx.beginPath(); ctx.moveTo(0, 420); ctx.lineTo(1024, 420); ctx.lineTo(1024, 768); ctx.lineTo(0, 768); ctx.fill();
-        
-        ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 3;
-        let offX = camX % 60;
-        for(let i=-20; i<40; i++) {
-            let startX = 512 + (offX + (i * 60) - 512) * 0.1; let endX = 512 + (offX + (i * 60) - 512) * 3.0;
-            ctx.beginPath(); ctx.moveTo(startX, 420); ctx.lineTo(endX, 768); ctx.stroke();
+        ctx.fillStyle = bgGrd;
+        ctx.fillRect(0, horizon - 100, 1024, 768 - (horizon - 100));
+
+        // Calculate camera rotation to face opponent
+        let dx = opponent.worldX - player.worldX;
+        let dz = opponent.worldZ - player.worldZ;
+        let angle = Math.atan2(dz, dx);
+
+        // In 3D space, facing directly along Z axis means angle = PI/2.
+        // We want to rotate the scene so that the opponent is always in front (along positive Z).
+        let rot = Math.PI/2 - angle;
+        let cosR = Math.cos(rot);
+        let sinR = Math.sin(rot);
+
+        function drawLine3D(x1, y1, z1, x2, y2, z2, color, width) {
+            let px1 = x1 - cx; let pz1 = z1 - cz;
+            let px2 = x2 - cx; let pz2 = z2 - cz;
+
+            let rx1 = px1 * cosR - pz1 * sinR;
+            let rz1 = px1 * sinR + pz1 * cosR;
+
+            let rx2 = px2 * cosR - pz2 * sinR;
+            let rz2 = px2 * sinR + pz2 * cosR;
+
+            let ry1 = y1 - cy;
+            let ry2 = y2 - cy;
+
+            if (rz1 <= 10 && rz2 <= 10) return;
+            if (rz1 <= 10) {
+                let t = (10 - rz1) / (rz2 - rz1);
+                rx1 = rx1 + (rx2 - rx1) * t; ry1 = ry1 + (ry2 - ry1) * t; rz1 = 10;
+            } else if (rz2 <= 10) {
+                let t = (10 - rz2) / (rz1 - rz2);
+                rx2 = rx2 + (rx1 - rx2) * t; ry2 = ry2 + (ry1 - ry2) * t; rz2 = 10;
+            }
+            let sx1 = 512 + (rx1 / rz1) * fov; let sy1 = horizon + (ry1 / rz1) * fov;
+            let sx2 = 512 + (rx2 / rz2) * fov; let sy2 = horizon + (ry2 / rz2) * fov;
+            ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath(); ctx.moveTo(sx1, sy1); ctx.lineTo(sx2, sy2); ctx.stroke();
         }
 
-        for(let i=0; i<4; i++) {
-            let y = 250 + (i * 45) + (camZ * 0.1); let thickness = 4 + (i * 1.5);
-            ctx.strokeStyle = '#8c160b'; ctx.lineWidth = thickness;
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.quadraticCurveTo(512, y+15, 1024, y); ctx.stroke();
-            ctx.strokeStyle = '#ff473a'; ctx.lineWidth = thickness * 0.4;
-            ctx.beginPath(); ctx.moveTo(0, y-1); ctx.quadraticCurveTo(512, y+14, 1024, y-1); ctx.stroke();
-        }
+        const R = 400; const FLOOR = 150; // Increased R to 400 so opponent doesn't go outside
+        for(let x=-R; x<=R; x+=50) drawLine3D(x, FLOOR, -R, x, FLOOR, R, 'rgba(255,255,255,0.05)', 2);
+        for(let z=-R; z<=R; z+=50) drawLine3D(-R, FLOOR, z, R, FLOOR, z, 'rgba(255,255,255,0.05)', 2);
+
+        drawLine3D(-R, FLOOR, -R, R, FLOOR, -R, '#fff', 4);
+        drawLine3D(R, FLOOR, -R, R, FLOOR, R, '#fff', 4);
+        drawLine3D(R, FLOOR, R, -R, FLOOR, R, '#fff', 4);
+        drawLine3D(-R, FLOOR, R, -R, FLOOR, -R, '#fff', 4);
+
+        let posts = [ [-R, -R], [R, -R], [R, R], [-R, R] ];
+        posts.forEach(p => {
+            drawLine3D(p[0], FLOOR, p[1], p[0], -80, p[1], '#444', 15);
+            drawLine3D(p[0], FLOOR, p[1], p[0], -80, p[1], '#222', 10);
+        });
+
+        let ropeHeights = [100, 40, -20, -80];
+        ropeHeights.forEach((y, i) => {
+            let color = i % 2 === 0 ? '#8c160b' : '#fff';
+            drawLine3D(-R, y, R, R, y, R, color, 4);
+            drawLine3D(-R, y, -R, R, y, -R, color, 4);
+            drawLine3D(-R, y, -R, -R, y, R, color, 4);
+            drawLine3D(R, y, -R, R, y, R, color, 4);
+        });
     }
 
     function drawOpponentProcedural() {
