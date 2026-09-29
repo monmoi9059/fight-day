@@ -951,9 +951,30 @@
         ctx.fillStyle = bgGrd;
         ctx.fillRect(0, horizon - 100, 1024, 768 - (horizon - 100));
 
+        // Calculate camera rotation to face opponent
+        let dx = opponent.worldX - player.worldX;
+        let dz = opponent.worldZ - player.worldZ;
+        let angle = Math.atan2(dz, dx);
+
+        // In 3D space, facing directly along Z axis means angle = PI/2.
+        // We want to rotate the scene so that the opponent is always in front (along positive Z).
+        let rot = Math.PI/2 - angle;
+        let cosR = Math.cos(rot);
+        let sinR = Math.sin(rot);
+
         function drawLine3D(x1, y1, z1, x2, y2, z2, color, width) {
-            let rx1 = x1 - cx; let ry1 = y1 - cy; let rz1 = z1 - cz;
-            let rx2 = x2 - cx; let ry2 = y2 - cy; let rz2 = z2 - cz;
+            let px1 = x1 - cx; let pz1 = z1 - cz;
+            let px2 = x2 - cx; let pz2 = z2 - cz;
+
+            let rx1 = px1 * cosR - pz1 * sinR;
+            let rz1 = px1 * sinR + pz1 * cosR;
+
+            let rx2 = px2 * cosR - pz2 * sinR;
+            let rz2 = px2 * sinR + pz2 * cosR;
+
+            let ry1 = y1 - cy;
+            let ry2 = y2 - cy;
+
             if (rz1 <= 10 && rz2 <= 10) return;
             if (rz1 <= 10) {
                 let t = (10 - rz1) / (rz2 - rz1);
@@ -967,9 +988,9 @@
             ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath(); ctx.moveTo(sx1, sy1); ctx.lineTo(sx2, sy2); ctx.stroke();
         }
 
-        const R = 320; const FLOOR = 150;
-        for(let x=-R; x<=R; x+=40) drawLine3D(x, FLOOR, -R, x, FLOOR, R, 'rgba(255,255,255,0.05)', 2);
-        for(let z=-R; z<=R; z+=40) drawLine3D(-R, FLOOR, z, R, FLOOR, z, 'rgba(255,255,255,0.05)', 2);
+        const R = 400; const FLOOR = 150; // Increased R to 400 so opponent doesn't go outside
+        for(let x=-R; x<=R; x+=50) drawLine3D(x, FLOOR, -R, x, FLOOR, R, 'rgba(255,255,255,0.05)', 2);
+        for(let z=-R; z<=R; z+=50) drawLine3D(-R, FLOOR, z, R, FLOOR, z, 'rgba(255,255,255,0.05)', 2);
 
         drawLine3D(-R, FLOOR, -R, R, FLOOR, -R, '#fff', 4);
         drawLine3D(R, FLOOR, -R, R, FLOOR, R, '#fff', 4);
