@@ -1398,18 +1398,29 @@
         ctx.lineWidth = 15;
         ctx.lineJoin = 'round';
 
+        // Scale based on stats (Power mostly affects width/thickness)
+        let buildScale = 1 + (player.stats.power - 10) * 0.05;
+        let armThickness = 25 * buildScale;
+
+        // Stance Specific Shoulders
+        let isOrthodox = player.handedness === 'orthodox';
+
         // Left shoulder
-        let leftShoulderY = (player.handedness === 'orthodox') ? 600 : 650;
+        let leftShoulderY = isOrthodox ? 580 : 680;
+        leftShoulderY -= (buildScale - 1) * 30; // higher shoulders
+        let leftShoulderW = (isOrthodox ? 280 : 200) * buildScale;
         ctx.beginPath();
         ctx.moveTo(0, 768);
-        ctx.quadraticCurveTo(150 + dodgeX, leftShoulderY + dodgeY, 250 + dodgeX, 768);
+        ctx.quadraticCurveTo(leftShoulderW/2 + dodgeX, leftShoulderY + dodgeY, leftShoulderW + dodgeX, 768);
         ctx.fill(); ctx.stroke();
 
         // Right shoulder
-        let rightShoulderY = (player.handedness === 'southpaw') ? 600 : 650;
+        let rightShoulderY = isOrthodox ? 680 : 580;
+        rightShoulderY -= (buildScale - 1) * 30;
+        let rightShoulderW = (isOrthodox ? 200 : 280) * buildScale;
         ctx.beginPath();
         ctx.moveTo(1024, 768);
-        ctx.quadraticCurveTo(874 + dodgeX, rightShoulderY + dodgeY, 774 + dodgeX, 768);
+        ctx.quadraticCurveTo(1024 - rightShoulderW/2 + dodgeX, rightShoulderY + dodgeY, 1024 - rightShoulderW + dodgeX, 768);
         ctx.fill(); ctx.stroke();
 
         ['left', 'right'].forEach(side => {
@@ -1537,7 +1548,8 @@
 
             if (arm.state === 'idle') { cx += Math.sin(Date.now()*0.003 + (side==='left'?0:Math.PI))*12; cy += Math.cos(Date.now()*0.004)*12; }
 
-            drawDetailedGlove(cx, cy, radius, player.color);
+            let gloveScale = 1 + (player.stats.power - 10) * 0.02;
+            drawDetailedGlove(cx, cy, radius * gloveScale, player.color);
         });
     }
 
