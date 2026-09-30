@@ -650,24 +650,21 @@
                 if (headHit) { 
                     dmg *= 1.5; spawnParticles(targetX, targetY, 'blood'); hitStopFrames = 4; setCamShake(15, 0.05);
                         if (isCounter) { spawnParticles(targetX, targetY, 'blood'); spawnParticles(targetX, targetY, 'blood'); hitStopFrames = 8; setCamShake(30, 0.1); }
-                    opponent.headHp -= dmg;
+                    opponent.hp -= dmg;
                 } else { 
                     spawnParticles(targetX, targetY, 'sweat'); hitStopFrames = 2; setCamShake(8, 0.02);
                         if (isCounter) { hitStopFrames = 5; setCamShake(20, 0.05); }
-                    opponent.bodyHp -= dmg;
+                    opponent.hp -= dmg;
                 }
                 opponent.state = 'hurt'; 
                 opponent.stateTimer = 450; 
                 opponent.worldZ += 15 - (opponent.build.scaleX * 5); 
             }
             
-            let totalMaxHp = opponent.maxHeadHp + opponent.maxBodyHp;
-            let totalHp = opponent.headHp + opponent.bodyHp;
-            opponent.damageFactor = 1 - Math.max(0, totalHp / totalMaxHp);
+            opponent.damageFactor = 1 - Math.max(0, opponent.hp / opponent.maxHp);
 
-            if (opponent.headHp <= 0 || opponent.bodyHp <= 0) {
-                opponent.headHp = Math.max(0, opponent.headHp);
-                opponent.bodyHp = Math.max(0, opponent.bodyHp);
+            if (opponent.hp <= 0) {
+                opponent.hp = Math.max(0, opponent.hp);
                 triggerKnockdown('opponent');
             }
         }
