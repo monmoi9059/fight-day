@@ -587,7 +587,7 @@
     function resolvePlayerHit(side, targetX, targetY) {
         let maxReach = 70 + (player.stats.reach * 5.0); 
         if (view.dist > maxReach) { 
-            player.arms[side].sta = Math.max(0, player.arms[side].sta - 5);
+            player.sta = Math.max(0, player.sta - 5);
             spawnText("WHIFF!", targetX - 40, targetY - 40, "#95a5a6"); 
             return; 
         }
@@ -605,7 +605,7 @@
         let bodyHit = (Math.abs(targetX - ox) < bW/2) && (Math.abs(targetY - bodyY) < bH/2);
 
         if (headHit || bodyHit) {
-            let staminaPenalty = 0.6 + 0.4 * (player.arms[side].sta / player.arms[side].maxSta);
+            let staminaPenalty = 0.6 + 0.4 * (player.sta / player.maxSta);
             let dmg = ((player.stats.power * 1.3) + (Math.random() * 5)) * staminaPenalty;
 
             // Combat style damage bonuses
@@ -792,7 +792,7 @@
         ['left', 'right'].forEach(side => {
             let arm = player.arms[side];
             if (arm.state === 'punching') {
-                let staminaPenalty = 0.6 + 0.4 * (arm.sta / arm.maxSta);
+                let staminaPenalty = 0.6 + 0.4 * (player.sta / player.maxSta);
                 arm.progress += (pSpeedMod * staminaPenalty) * (dt/16);
                 if (arm.progress >= 1) { 
                     arm.progress = 1; arm.state = 'retracting'; resolvePlayerHit(side, arm.targetX, arm.targetY);
