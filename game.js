@@ -1,0 +1,1587 @@
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+
+    let gameState = 'MENU';
+    let lastTime = 0;
+    let hitStopFrames = 0;
+    let camShake = { x: 0, y: 0, rot: 0 };
+
+    const mouse = { x: 512, y: 384, left: false, right: false };
+    const keys = { w: false, a: false, s: false, d: false, q: false, e: false, shift: false, arrowup: false, arrowdown: false, arrowleft: false, arrowright: false };
+    const actions = { dodgeLeft: false, dodgeRight: false };
+
+    let particles = [];
+    let kd = { active: false, fighter: null, count: 0, timer: 0, playerProgress: 0, oppWakeCount: 0, oppWillWake: false };
+
+    let player = {
+        name: "Contender", color: "#e84118", money: 0, wins: 0, losses: 0, rank: 100,
+        skin: { base: "#e1b182", dark: "#9c6d42", high: "#fcdbb8" },
+        stats: { power: 10, speed: 10, defense: 10, stamina: 10, accuracy: 10, reach: 10, heart: 10 },
+        handedness: 'orthodox', combatStyle: 'outboxer', blockStyle: 'normal',
+        hp: 100, maxHp: 100, sta: 100, maxSta: 100, isBlocking: false, exhausted: false, knockdowns: 0,
+        worldX: 0, worldZ: 0, dodgeState: 'none', dodgeTimer: 0, dodgeOffset: 0, tilt: 0, counterWindow: 0, leanX: 0, leanY: 0,
+        arms: { left: { state: 'idle', progress: 0, targetX: 0, targetY: 0 }, right: { state: 'idle', progress: 0, targetX: 0, targetY: 0 } }
+    };
+
+    let opponent = {
+        name: "Boxer", rank: 99, color: "#0097e6", desc: "", fightingStyle: 'outboxer',
+        skin: { base: "#e1b182", dark: "#9c6d42", high: "#fcdbb8" },
+                build: { scaleX: 1, scaleY: 1, muscle: 1, belly: 0, jaw: 1, hair: 'buzzcut', hairColor: '#111' },
+        stats: { power: 10, speed: 10, defense: 10, stamina: 10, accuracy: 10, reach: 10, heart: 10, aggro: 0.5 },
+        hp: 100, maxHp: 100, sta: 100, maxSta: 100, knockdowns: 0,
+        state: 'idle', stateTimer: 0, worldX: 0, worldZ: 140, localX: 0, localY: 0,
+        head: { w: 85, h: 110 }, body: { w: 200, h: 220 }, currentAttack: null, dodgeDir: 0, damageFactor: 0
+    };
+
+    const RING_RADIUS = 300;
+    let view = { dist: 140, scale: 1.0, screenX: 512, screenY: 384, crossX: 512, crossY: 384 };
+
+    // --- UI FUNCTIONS ---
+    function showUI(id) {
+        document.querySelectorAll('.ui-layer').forEach(el => el.classList.add('hidden'));
+        if (id) document.getElementById(id).classList.remove('hidden');
+    }
+
+    function startCareer() {
+        player.name = document.getElementById('playerName').value || "Fighter";
+        player.color = document.getElementById('playerColor').value;
+        player.handedness = document.getElementById('playerStance').value;
+        player.combatStyle = document.getElementById('playerCombatStyle').value;
+        player.blockStyle = document.getElementById('playerBlockStyle').value;
+
+        if (player.combatStyle === 'outboxer') { player.stats.speed += 2; player.stats.reach += 2; player.stats.power -= 2; }
+        else if (player.combatStyle === 'inside_puncher') { player.stats.power += 2; player.stats.heart += 2; player.stats.reach -= 2; }
+        else if (player.combatStyle === 'peekaboo') { player.stats.speed += 2; player.stats.power += 2; player.stats.stamina -= 2; }
+        else if (player.combatStyle === 'showboat') { player.stats.speed += 3; player.stats.defense -= 3; }
+        else if (player.combatStyle === 'mayweather') { player.stats.defense += 2; player.stats.accuracy += 2; player.stats.power -= 2; }
+        else if (player.combatStyle === 'slugger') { player.stats.power += 3; player.stats.speed -= 2; player.stats.accuracy -= 1; }
+        else if (player.combatStyle === 'hitman') { player.stats.reach += 3; player.stats.power += 1; player.stats.defense -= 2; }
+        else if (player.combatStyle === 'swarmer') { player.stats.stamina += 3; player.stats.heart += 1; player.stats.reach -= 2; }
+
+        if (player.blockStyle === 'philly_shell') { player.stats.defense += 2; player.stats.stamina -= 2; }
+        else if (player.blockStyle === 'high_guard') { player.stats.defense += 2; player.stats.speed -= 2; }
+        else if (player.blockStyle === 'cross_armed') { player.stats.defense += 3; player.stats.speed -= 2; player.stats.accuracy -= 1; }
+        generateOpponent(player.rank - 1);
+        showUI('menu-hub');
+        updateHubUI();
+    }
+
+    const fnList = ["Iron", "Flash", "Slippery", "Mad", "King", "Wild", "Lethal", "Smokin'", "Sugar", "Venom", "Bones", "Tank"];
+    const lnList = ["Mike", "Ali", "Frazier", "Foreman", "Marciano", "Duran", "Hearns", "Tyson", "Balboa", "Creed", "Drago"];
+    const skinProfiles = [
+        { base: "#f1c27d", dark: "#b88a44", high: "#ffe5b4" }, { base: "#e0ac69", dark: "#a67332", high: "#fad3a2" },
+        { base: "#c68642", dark: "#7a4914", high: "#e6ae73" }, { base: "#8d5524", dark: "#4a2608", high: "#b57740" },
+        { base: "#3d2218", dark: "#1a0b06", high: "#663e2d" }
+    ];
+
+    function generateOpponent(targetRank) {
+        if(targetRank < 1) targetRank = 1;
+        let base = 10 + Math.floor((101 - targetRank) * 0.8);
+
+        let buildClass = Math.random();
+                let build = {
+            scaleX: 1, scaleY: 1, muscle: 1, belly: 0, jaw: 1,
+            hair: ['bald', 'buzzcut', 'mohawk', 'afro', 'fade'][Math.floor(Math.random() * 5)],
+            facialHair: ['clean', 'stubble', 'goatee', 'beard'][Math.floor(Math.random() * 4)],
+            hairColor: ['#111', '#4a2511', '#e8b831', '#8b2e16'][Math.floor(Math.random() * 4)]
+        };
+        let styleDesc = "";
+
+        let fightingStyle = 'outboxer';
+        if (buildClass < 0.3) {
+            build.scaleX = 1.15 + Math.random()*0.2; build.scaleY = 1.0 + Math.random()*0.15;
+            build.belly = 0.4 + Math.random()*0.5; build.muscle = 0.7 + Math.random()*0.3; build.jaw = 1.2 + Math.random()*0.2;
+            fightingStyle = 'brawler';
+            styleDesc = "Brawler - Wide, tough, heavy hitter.";
+            base += 2;
+        } else if (buildClass < 0.6) {
+            build.scaleX = 0.8 + Math.random()*0.15; build.scaleY = 0.85 + Math.random()*0.15;
+            build.belly = 0; build.muscle = 0.8 + Math.random()*0.4; build.jaw = 0.8 + Math.random()*0.2;
+            fightingStyle = Math.random() > 0.5 ? 'swarmer' : 'outboxer';
+            styleDesc = fightingStyle === 'swarmer' ? "Swarmer - Fast, aggressive, constant pressure." : "Outboxer - Fast, evasive, fights outside.";
+        } else {
+            build.scaleX = 0.95 + Math.random()*0.15; build.scaleY = 1.0 + Math.random()*0.1;
+            build.belly = 0.0; build.muscle = 1.3 + Math.random()*0.5; build.jaw = 1.0 + Math.random()*0.1;
+            fightingStyle = Math.random() > 0.5 ? 'swarmer' : 'outboxer';
+            styleDesc = fightingStyle === 'swarmer' ? "Athletic Swarmer - Shredded, relentless." : "Athletic Outboxer - Balanced, tactical.";
+        }
+
+        opponent = {
+            name: `${fnList[Math.floor(Math.random()*fnList.length)]} ${lnList[Math.floor(Math.random()*lnList.length)]}`,
+            rank: targetRank, color: `hsl(${Math.random()*360}, 80%, 30%)`, desc: styleDesc, fightingStyle: fightingStyle,
+            skin: skinProfiles[Math.floor(Math.random() * skinProfiles.length)], build: build,
+            stats: {
+                power: base + Math.floor(Math.random() * 10) + (build.scaleX > 1 ? 5 : 0),
+                speed: base + Math.floor(Math.random() * 10) - (build.scaleX > 1 ? 5 : -5),
+                defense: base + Math.floor(Math.random() * 10), stamina: base + Math.floor(Math.random() * 10),
+                accuracy: base + Math.floor(Math.random() * 10), reach: base + Math.floor(Math.random() * 10), heart: base + Math.floor(Math.random() * 10),
+                aggro: 0.3 + ((101-targetRank) * 0.006)
+            },
+            hp: 100 + (base * 3.5), maxHp: 100 + (base * 3.5), sta: 100 + (base * 2.5), maxSta: 100 + (base * 2.5), knockdowns: 0,
+            state: 'idle', stateTimer: 0, worldX: 0, worldZ: 140, localX: 0, localY: 0,
+            head: { w: 90 * build.jaw, h: 120 * build.scaleY }, body: { w: 220 * build.scaleX, h: 240 * build.scaleY },
+            currentAttack: null, dodgeDir: 0, damageFactor: 0
+        };
+    }
+
+    function updateHubUI() {
+        document.getElementById('hub-name-rank').innerText = `${player.name} - Rank #${player.rank}`;
+        document.getElementById('hub-record').innerText = `Record: ${player.wins}-${player.losses} | Bank: $${player.money}`;
+        ['power', 'speed', 'defense', 'stamina', 'accuracy', 'reach', 'heart'].forEach(stat => {
+            let cost = Math.floor(Math.pow(player.stats[stat], 1.3) * 5);
+            let statAbbr = stat.substring(0,3);
+            document.getElementById(`stat-${statAbbr}`).innerText = player.stats[stat];
+            let btn = document.getElementById(`btn-upg-${statAbbr}`);
+            btn.innerText = `UPG ($${cost})`;
+            btn.disabled = player.money < cost;
+        });
+        document.getElementById('opp-name').innerText = opponent.name;
+        document.getElementById('opp-rank').innerText = opponent.rank;
+        document.getElementById('opp-desc').innerText = opponent.desc;
+    }
+
+    function upgradeStat(stat) {
+        let cost = Math.floor(Math.pow(player.stats[stat], 1.3) * 5);
+        if (player.money >= cost) {
+            player.money -= cost;
+            player.stats[stat]++;
+            updateHubUI();
+        }
+    }
+
+    // --- EFFECT SPAWNERS ---
+    function spawnText(text, x, y, color) {
+        let el = document.createElement('div');
+        el.className = 'floating-text';
+        el.innerText = text;
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        el.style.color = color;
+        document.getElementById('game-container').appendChild(el);
+        setTimeout(() => el.remove(), 800);
+    }
+
+    function spawnParticles(x, y, type) {
+        let count = type === 'sweat' ? 12 : 30;
+        for(let i=0; i<count; i++) {
+            particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 25,
+                vy: (Math.random() - 0.5) * 20 - 10,
+                life: 1.0,
+                decay: Math.random() * 0.05 + 0.02,
+                type: type
+            });
+        }
+    }
+
+    function flashDamage() {
+        let overlay = document.getElementById('damage-overlay');
+        if(overlay) {
+            overlay.style.opacity = 1;
+            setTimeout(() => overlay.style.opacity = 0, 150);
+        }
+    }
+
+    function setCamShake(intensity, rot) {
+        camShake.x = (Math.random() - 0.5) * intensity;
+        camShake.y = (Math.random() - 0.5) * intensity;
+        camShake.rot = (Math.random() - 0.5) * rot;
+    }
+
+    // --- GAME FLOW LOGIC ---
+    function startFight() {
+        player.maxHp = 100 + (player.stats.defense * 4); player.maxSta = 100 + (player.stats.stamina * 3);
+        player.hp = player.maxHp; player.sta = player.maxSta; player.knockdowns = 0;
+        player.isBlocking = false; player.exhausted = false; player.worldX = 0; player.worldZ = -50;
+        player.dodgeState = 'none'; player.dodgeTimer = 0; player.dodgeOffset = 0; player.tilt = 0;
+        player.arms.left.state = 'idle'; player.arms.right.state = 'idle';
+
+        opponent.hp = opponent.maxHp; opponent.sta = opponent.maxSta; opponent.damageFactor = 0; opponent.knockdowns = 0;
+        opponent.state = 'idle'; opponent.worldX = 0; opponent.worldZ = 120; opponent.localX = 0; opponent.localY = 0;
+
+        particles = []; hitStopFrames = 0; kd.active = false;
+
+        document.getElementById('kd-overlay').classList.add('hidden');
+        showUI('');
+        document.getElementById('hud').classList.remove('hidden');
+        document.getElementById('hud-p-name').innerText = player.name;
+        document.getElementById('hud-o-name').innerText = opponent.name;
+        document.getElementById('hud-o-desc').innerText = opponent.desc;
+        gameState = 'FIGHT';
+    }
+
+    function triggerKnockdown(fighterStr) {
+        gameState = 'KNOCKDOWN'; kd.active = true; kd.fighter = fighterStr; kd.count = 1; kd.timer = 0;
+        document.getElementById('kd-overlay').classList.remove('hidden');
+        document.getElementById('kd-count').innerText = "1";
+
+        if (fighterStr === 'player') {
+            player.knockdowns++; kd.playerProgress = 0;
+            document.getElementById('kd-ui-player').classList.remove('hidden');
+            document.getElementById('kd-recovery-bar').style.width = "0%";
+            opponent.worldX = 150; opponent.worldZ = 150;
+            opponent.hp = Math.min(opponent.maxHp, opponent.hp + (opponent.maxHp * 0.15));
+            document.getElementById('hud-o-hp').style.width = `${Math.max(0, (opponent.hp / opponent.maxHp) * 100)}%`;
+        } else {
+            opponent.knockdowns++; document.getElementById('kd-ui-player').classList.add('hidden');
+            let recoveryChance = 100 - (opponent.knockdowns * 30) + (opponent.stats.heart * 2);
+            kd.oppWillWake = (Math.random() * 100) < recoveryChance;
+            kd.oppWakeCount = Math.floor(Math.random() * 4) + 5;
+            player.worldX = 0; player.worldZ = -50;
+            player.hp = Math.min(player.maxHp, player.hp + (player.maxHp * 0.15));
+            document.getElementById('hud-p-hp').style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
+        }
+    }
+
+    function endFight(playerWon) {
+        gameState = 'POSTFIGHT';
+        document.getElementById('hud').classList.add('hidden');
+        document.getElementById('kd-overlay').classList.add('hidden');
+        showUI('menu-postfight');
+
+        let title = document.getElementById('pf-result'); let details = document.getElementById('pf-details');
+        if (playerWon) {
+            player.wins++;
+            let w = 250 + ((100 - opponent.rank) * 20); player.money += w;
+            let rankUp = opponent.rank === 1 ? 0 : Math.floor(Math.random() * 4) + 1;
+            if (opponent.rank === 1 && player.rank !== 1) rankUp = player.rank - 1;
+            player.rank = Math.max(1, player.rank - rankUp);
+            title.innerText = "KNOCKOUT!"; title.style.color = "#4cd137"; title.style.textShadow = "0 0 20px #4cd137";
+            details.innerText = `You slept ${opponent.name}!\nEarned $${w}\nYour rank is now #${player.rank}`;
+            generateOpponent(player.rank - 1);
+        } else {
+            player.losses++; player.money += 75;
+            title.innerText = "TKO..."; title.style.color = "#e84118"; title.style.textShadow = "0 0 20px #e84118";
+            details.innerText = `You didn't beat the count.\nRecovered $75 for medical bills.`;
+            generateOpponent(player.rank);
+        }
+    }
+
+    // --- INPUT LISTENERS ---
+    window.addEventListener('keydown', e => {
+        let k = e.key.toLowerCase();
+        if (gameState === 'KNOCKDOWN' && kd.fighter === 'player' && k === ' ') { mashRecovery(); return; }
+        if (gameState !== 'FIGHT') return;
+        if (k === 'shift') keys.shift = true;
+        if (k === 'q') keys.q = true;
+        if (k === 'e') keys.e = true;
+        if (k === 'arrowleft') keys.arrowleft = true;
+        if (k === 'arrowright') keys.arrowright = true;
+        if (k === 'arrowup') keys.arrowup = true;
+        if (k === 'arrowdown') keys.arrowdown = true;
+        handlePunchInput();
+        if (k === 'w') keys.w = true; if (k === 's') keys.s = true; if (k === 'a') keys.a = true; if (k === 'd') keys.d = true;
+    });
+    window.addEventListener('keyup', e => {
+        let k = e.key.toLowerCase();
+        if (k === 'shift') keys.shift = false;
+        if (k === 'q') keys.q = false;
+        if (k === 'e') keys.e = false;
+        if (k === 'arrowleft') keys.arrowleft = false;
+        if (k === 'arrowright') keys.arrowright = false;
+        if (k === 'arrowup') keys.arrowup = false;
+        if (k === 'arrowdown') keys.arrowdown = false;
+        handlePunchInput();
+        if (k === 'w') keys.w = false; if (k === 's') keys.s = false; if (k === 'a') keys.a = false; if (k === 'd') keys.d = false;
+    });
+
+    canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        mouse.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+    });
+    canvas.addEventListener('mousedown', e => {
+        if (gameState === 'KNOCKDOWN' && kd.fighter === 'player') { mashRecovery(); return; }
+        if (gameState !== 'FIGHT') return;
+        // mouse punching disabled
+        // if (e.button === 0) mouse.left = true;
+        // if (e.button === 2) mouse.right = true;
+        // handlePunchInput();
+    });
+    canvas.addEventListener('mouseup', e => {
+        if (gameState !== 'FIGHT') return;
+        // mouse punching disabled
+        // if (e.button === 0) mouse.left = false;
+        // if (e.button === 2) mouse.right = false;
+        // handlePunchInput();
+    });
+
+    // --- CORE GAME MECHANICS ---
+    function handlePunchInput() {
+        if (keys.arrowleft && keys.arrowright) { player.isBlocking = true; }
+        else {
+            player.isBlocking = false;
+            if (player.exhausted || player.dodgeState !== 'none') return;
+
+            let modShift = keys.q;
+            let modQ = keys.shift;
+
+            if (keys.arrowup && player.arms.right.state === 'idle') {
+                if (modShift) launchPunch('right', 'gazelle_punch'); // Signature
+                else if (modQ) launchPunch('right', 'flicker_jab'); // Thomas Hearns
+                else launchPunch('right', 'overhead');
+            }
+            else if (keys.arrowdown && player.arms.right.state === 'idle') {
+                if (modShift) launchPunch('right', 'bolo'); // Sugar Ray Leonard / Kid Gavilan
+                else if (modQ) launchPunch('left', 'lead_uppercut');
+                else launchPunch('right', 'uppercut');
+            }
+            else if (keys.arrowleft && player.arms.left.state === 'idle') {
+                if (modShift) launchPunch('left', 'smash'); // Donovan Ruddock
+                else if (modQ) launchPunch('left', 'jab');
+                else launchPunch('left', 'straight');
+            }
+            else if (keys.arrowright && player.arms.right.state === 'idle') {
+                if (modShift) launchPunch('right', 'haymaker');
+                else if (modQ) launchPunch('right', 'pull_counter'); // Floyd Mayweather
+                else launchPunch('right', 'cross');
+            }
+        }
+    }
+
+    function mashRecovery() {
+        if (gameState !== 'KNOCKDOWN' || kd.fighter !== 'player') return;
+        kd.playerProgress += 8 + (player.stats.heart * 0.6);
+
+        if (kd.playerProgress >= 100) {
+            kd.playerProgress = 100;
+            player.hp = player.maxHp * (0.15 + (player.stats.heart * 0.02));
+            player.sta = player.maxSta * 0.5;
+            document.getElementById('kd-overlay').classList.add('hidden');
+            opponent.worldX = 0; opponent.worldZ = 120;
+            kd.active = false;
+            gameState = 'FIGHT';
+        }
+        document.getElementById('kd-recovery-bar').style.width = `${kd.playerProgress}%`;
+    }
+
+    function launchPunch(side, punchType = 'straight') {
+        let cost = 12 - (player.stats.stamina * 0.05);
+        if (['haymaker', 'heavy_overhead', 'bolo', 'smash', 'gazelle_punch', 'liver_shot'].includes(punchType)) cost *= 1.5;
+
+        if (player.sta < cost) { player.exhausted = true; setTimeout(() => { player.exhausted = false; }, 1500); return; }
+        player.sta -= cost;
+
+        let spread = Math.max(0, 45 - (player.stats.accuracy * 1.5));
+        let arm = player.arms[side];
+        arm.state = 'punching';
+        arm.progress = 0;
+        arm.punchType = punchType;
+
+        let headY = view.screenY + ((opponent.localY - 50 * opponent.build.scaleY) * view.scale);
+        let bodyY = view.screenY + ((opponent.localY + 70 * opponent.build.scaleY) * view.scale);
+
+        let tx = view.screenX + (opponent.localX * view.scale) + (Math.random() - 0.5) * spread * 2;
+        let ty = (keys.e ? bodyY : headY) + (Math.random() - 0.5) * spread * 2;
+
+        if (punchType === 'overhead' || punchType === 'heavy_overhead') {
+            ty -= 50;
+        } else if (punchType === 'uppercut' || punchType === 'bolo') {
+            ty += 50;
+        }
+
+        arm.targetX = tx;
+        arm.targetY = ty;
+
+        let dodgeChance = (opponent.stats.speed * 0.01) + (opponent.stats.defense * 0.005);
+        dodgeChance -= (opponent.build.scaleX - 1) * 0.2;
+
+        if (opponent.state === 'idle' && Math.random() < Math.min(dodgeChance, 0.8)) {
+            opponent.state = 'dodging';
+            if (ty < view.screenY - 20) opponent.dodgeDir = (Math.random() < 0.3) ? 2 : (side === 'left' ? 1 : -1);
+            else opponent.dodgeDir = Math.random() > 0.5 ? 1 : -1;
+            opponent.stateTimer = 350;
+        }
+    }
+
+    function resolvePlayerHit(side, targetX, targetY) {
+        let maxReach = 70 + (player.stats.reach * 5.0);
+        if (view.dist > maxReach) {
+            player.arms[side].sta = Math.max(0, player.arms[side].sta - 5);
+            spawnText("WHIFF!", targetX - 40, targetY - 40, "#95a5a6");
+            return;
+        }
+
+        if (opponent.state === 'hurt' || opponent.state === 'dodging') return;
+
+        let hW = opponent.head.w * view.scale; let hH = opponent.head.h * view.scale;
+        let bW = opponent.body.w * view.scale; let bH = opponent.body.h * view.scale;
+
+        let ox = view.screenX + (opponent.localX * view.scale);
+        let headY = view.screenY + ((opponent.localY - 50 * opponent.build.scaleY) * view.scale);
+        let bodyY = view.screenY + ((opponent.localY + 70 * opponent.build.scaleY) * view.scale);
+
+        let headHit = (Math.abs(targetX - ox) < hW/2) && (Math.abs(targetY - headY) < hH/2);
+        let bodyHit = (Math.abs(targetX - ox) < bW/2) && (Math.abs(targetY - bodyY) < bH/2);
+
+        if (headHit || bodyHit) {
+            let staminaPenalty = 0.6 + 0.4 * (player.arms[side].sta / player.arms[side].maxSta);
+            let dmg = ((player.stats.power * 1.3) + (Math.random() * 5)) * staminaPenalty;
+
+            // Combat style damage bonuses
+            let pType = player.arms[side].punchType;
+            if (player.combatStyle === 'outboxer' && ['jab', 'straight', 'cross'].includes(pType)) {
+                dmg *= 1.3;
+            } else if (player.combatStyle === 'inside_puncher' && ['uppercut', 'lead_uppercut', 'body_hook', 'shovel_hook', 'liver_shot'].includes(pType)) {
+                dmg *= 1.3;
+            } else if (player.combatStyle === 'peekaboo' && ['smash', 'gazelle_punch', 'liver_shot'].includes(pType)) {
+                dmg *= 1.4;
+            } else if (player.combatStyle === 'showboat' && ['bolo', 'uppercut'].includes(pType)) {
+                dmg *= 1.25;
+            } else if (player.combatStyle === 'mayweather' && ['pull_counter', 'cross'].includes(pType)) {
+                dmg *= 1.4;
+            } else if (player.combatStyle === 'slugger' && ['haymaker', 'heavy_overhead', 'overhand', 'overhead'].includes(pType)) {
+                dmg *= 1.5;
+            } else if (player.combatStyle === 'hitman' && ['flicker_jab', 'cross'].includes(pType)) {
+                dmg *= 1.3;
+            } else if (player.combatStyle === 'swarmer' && ['body_hook', 'shovel_hook', 'uppercut', 'lead_uppercut'].includes(pType)) {
+                dmg *= 1.2;
+            }
+            if (player.arms.left.punchType === 'haymaker' || player.arms.right.punchType === 'haymaker' || player.arms.right.punchType === 'heavy_overhead' || player.arms.right.punchType === 'bolo') {
+                // If the arm that hit was a heavy punch... wait, resolvePlayerHit doesn't know WHICH arm hit.
+                // We can approximate by checking if ANY arm is currently punching with a heavy type
+                let heavyPunches = ['haymaker', 'heavy_overhead', 'bolo', 'smash', 'gazelle_punch', 'liver_shot', 'pull_counter'];
+                if ((player.arms.left.state === 'retracting' && heavyPunches.includes(player.arms.left.punchType)) ||
+                    (player.arms.right.state === 'retracting' && heavyPunches.includes(player.arms.right.punchType))) {
+                    dmg *= 1.8;
+                }
+            }
+            let isCounter = player.counterWindow > 0 && opponent.state !== 'blocking';
+            if (isCounter) {
+                dmg *= 2.5;
+                spawnText("COUNTER PUNCH!", targetX, targetY - 40, "#fbc531");
+            }
+
+            if (opponent.state === 'blocking') {
+                dmg *= (15 / (opponent.stats.defense + 15));
+                spawnParticles(targetX, targetY, 'sweat');
+                spawnText("BLOCKED", targetX - 50, targetY, "#f39c12");
+            } else {
+                if (headHit) {
+                    dmg *= 1.5; spawnParticles(targetX, targetY, 'blood'); hitStopFrames = 4; setCamShake(15, 0.05);
+                        if (isCounter) { spawnParticles(targetX, targetY, 'blood'); spawnParticles(targetX, targetY, 'blood'); hitStopFrames = 8; setCamShake(30, 0.1); }
+                    opponent.headHp -= dmg;
+                } else {
+                    spawnParticles(targetX, targetY, 'sweat'); hitStopFrames = 2; setCamShake(8, 0.02);
+                        if (isCounter) { hitStopFrames = 5; setCamShake(20, 0.05); }
+                    opponent.bodyHp -= dmg;
+                }
+                opponent.state = 'hurt';
+                opponent.stateTimer = 450;
+                opponent.worldZ += 15 - (opponent.build.scaleX * 5);
+            }
+
+            let totalMaxHp = opponent.maxHeadHp + opponent.maxBodyHp;
+            let totalHp = opponent.headHp + opponent.bodyHp;
+            opponent.damageFactor = 1 - Math.max(0, totalHp / totalMaxHp);
+
+            if (opponent.headHp <= 0 || opponent.bodyHp <= 0) {
+                opponent.headHp = Math.max(0, opponent.headHp);
+                opponent.bodyHp = Math.max(0, opponent.bodyHp);
+                triggerKnockdown('opponent');
+            }
+        }
+    }
+
+    // --- ENGINE TICK UPDATES ---
+    function update(dt) {
+        if (gameState === 'KNOCKDOWN') {
+            updateKnockdown(dt);
+            updateParticles();
+            return;
+        }
+        if (gameState !== 'FIGHT') return;
+        if (hitStopFrames > 0) { hitStopFrames--; return; }
+    if (player.counterWindow > 0) { player.counterWindow -= dt; }
+
+
+        camShake.x *= 0.8; camShake.y *= 0.8; camShake.rot *= 0.8;
+
+        // Player Dodge state
+        let dodgeCost = 15;
+        if (player.dodgeTimer > 0) {
+            player.dodgeTimer -= dt;
+            if (player.dodgeTimer <= 0) player.dodgeState = 'none';
+        } else if (!player.exhausted && !player.isBlocking) {
+            if (actions.dodgeLeft) {
+                if (player.sta >= dodgeCost) { player.dodgeState = 'left'; player.dodgeTimer = 350; player.sta -= dodgeCost; }
+                else { player.exhausted = true; setTimeout(() => player.exhausted = false, 1500); }
+            } else if (actions.dodgeRight) {
+                if (player.sta >= dodgeCost) { player.dodgeState = 'right'; player.dodgeTimer = 350; player.sta -= dodgeCost; }
+                else { player.exhausted = true; setTimeout(() => player.exhausted = false, 1500); }
+            }
+        }
+        actions.dodgeLeft = false; actions.dodgeRight = false;
+
+        let targetOffset = 0; let targetTilt = 0;
+        if (player.dodgeState === 'left') { targetOffset = 180; targetTilt = -0.06; }
+        else if (player.dodgeState === 'right') { targetOffset = -180; targetTilt = 0.06; }
+        player.dodgeOffset += (targetOffset - player.dodgeOffset) * 0.25;
+        player.tilt += (targetTilt - player.tilt) * 0.25;
+
+        // Player Movement and Body Leaning
+        let moveSpeed = 160 * (dt/1000);
+        let targetLeanX = 0;
+        let targetLeanY = 0;
+
+        if (keys.shift) {
+            if (keys.w) targetLeanY = -120; // Lean forward
+            if (keys.s) targetLeanY = 120;  // Lean back
+            if (keys.a) targetLeanX = -150; // Lean left
+            if (keys.d) targetLeanX = 150;  // Lean right
+        } else {
+            if (keys.w) player.worldZ += moveSpeed;
+            if (keys.s) player.worldZ -= moveSpeed;
+            if (keys.a) player.worldX -= moveSpeed;
+            if (keys.d) player.worldX += moveSpeed;
+        }
+
+        player.leanX += (targetLeanX - player.leanX) * 0.15;
+        player.leanY += (targetLeanY - player.leanY) * 0.15;
+
+
+        let pDist = Math.hypot(player.worldX, player.worldZ);
+        if (pDist > RING_RADIUS) {
+            let a = Math.atan2(player.worldZ, player.worldX);
+            player.worldX = Math.cos(a) * RING_RADIUS;
+            player.worldZ = Math.sin(a) * RING_RADIUS;
+        }
+
+        view.dist = Math.hypot(opponent.worldX - player.worldX, opponent.worldZ - player.worldZ);
+        if (view.dist < 50) {
+            let push = Math.atan2(opponent.worldZ - player.worldZ, opponent.worldX - player.worldX);
+            player.worldX = opponent.worldX - Math.cos(push)*50;
+            player.worldZ = opponent.worldZ - Math.sin(push)*50;
+            view.dist = 50;
+        }
+
+        view.scale = 130 / Math.max(50, view.dist);
+        view.screenX = 512 + ((opponent.worldX - player.worldX) * 2.5 * view.scale) - ((mouse.x - 512)*0.1) + player.dodgeOffset;
+        view.screenX -= player.leanX;
+
+        view.screenY = 384 + ((view.dist - 130) * 0.9) - ((mouse.y - 384)*0.1);
+        view.screenY += player.leanY;
+
+
+        let sway = Math.max(0, 35 - player.stats.accuracy);
+        view.crossX = mouse.x + Math.sin(Date.now()*0.002) * sway;
+        view.crossY = mouse.y + Math.cos(Date.now()*0.003) * sway;
+
+        if (!keys.arrowleft && !keys.arrowright && !keys.arrowup && !keys.arrowdown && player.arms.left.state === 'idle' && player.arms.right.state === 'idle') {
+            if (player.sta < player.maxSta) player.sta += (player.stats.stamina * 0.1) * (dt/16);
+        }
+
+        let pSpeedMod = player.exhausted ? 0.03 : (0.07 + (player.stats.speed * 0.0025));
+        ['left', 'right'].forEach(side => {
+            if (player.arms[side].state === 'punching') {
+                let pType = player.arms[side].punchType;
+
+                // Base modifier for heavy punches
+                let isHeavy = ['haymaker', 'heavy_overhead', 'bolo'].includes(pType);
+                if (isHeavy) pSpeedMod *= 0.65;
+
+                // Style-specific speed bonuses
+                if (player.combatStyle === 'outboxer' && ['jab', 'straight', 'cross'].includes(pType)) {
+                    pSpeedMod *= 1.25;
+                } else if (player.combatStyle === 'inside_puncher' && ['uppercut', 'lead_uppercut', 'body_hook', 'shovel_hook', 'liver_shot'].includes(pType)) {
+                    pSpeedMod *= 1.20;
+                } else if (player.combatStyle === 'peekaboo' && ['smash', 'gazelle_punch', 'liver_shot'].includes(pType)) {
+                    pSpeedMod *= 1.30;
+                } else if (player.combatStyle === 'showboat' && ['bolo', 'uppercut'].includes(pType)) {
+                    if (pType === 'bolo') pSpeedMod *= 1.4; // Counteract the heavy slowdown
+                    else pSpeedMod *= 1.25;
+                } else if (player.combatStyle === 'mayweather' && ['pull_counter', 'cross'].includes(pType)) {
+                    pSpeedMod *= 1.35;
+                } else if (player.combatStyle === 'hitman' && ['flicker_jab', 'cross'].includes(pType)) {
+                    pSpeedMod *= 1.35;
+                } else if (player.combatStyle === 'swarmer' && ['body_hook', 'shovel_hook', 'uppercut', 'lead_uppercut'].includes(pType)) {
+                    pSpeedMod *= 1.30;
+                }
+            }
+        });
+        ['left', 'right'].forEach(side => {
+            let arm = player.arms[side];
+            if (arm.state === 'punching') {
+                let staminaPenalty = 0.6 + 0.4 * (arm.sta / arm.maxSta);
+                arm.progress += (pSpeedMod * staminaPenalty) * (dt/16);
+                if (arm.progress >= 1) {
+                    arm.progress = 1; arm.state = 'retracting'; resolvePlayerHit(side, arm.targetX, arm.targetY);
+                }
+            } else if (arm.state === 'retracting') {
+                arm.progress -= (pSpeedMod * 0.6) * (dt/16);
+                if (arm.progress <= 0) { arm.progress = 0; arm.state = 'idle'; }
+            }
+        });
+
+        updateOpponent(dt);
+        updateParticles();
+
+        document.getElementById('hud-p-hp').style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
+        document.getElementById('hud-p-sta').style.width = `${Math.max(0, (player.sta / player.maxSta) * 100)}%`;
+        document.getElementById('hud-o-hp').style.width = `${Math.max(0, (opponent.hp / opponent.maxHp) * 100)}%`;
+        document.getElementById('hud-o-sta').style.width = `${Math.max(0, (opponent.sta / opponent.maxSta) * 100)}%`;
+    }
+
+    function updateKnockdown(dt) {
+        kd.timer += dt;
+        if (kd.timer >= 1000) {
+            kd.timer = 0; kd.count++;
+            let countEl = document.getElementById('kd-count'); countEl.innerText = kd.count;
+            countEl.style.animation = 'none'; countEl.offsetHeight; countEl.style.animation = 'pulseCount 1s infinite';
+            if (kd.count >= 10) { endFight(kd.fighter === 'opponent'); return; }
+        }
+
+        if (kd.fighter === 'player') {
+            let decay = (15 + (player.knockdowns * 8)) * (dt/1000);
+            kd.playerProgress = Math.max(0, kd.playerProgress - decay);
+            document.getElementById('kd-recovery-bar').style.width = `${kd.playerProgress}%`;
+        } else {
+            if (kd.oppWillWake && kd.count === kd.oppWakeCount) {
+                opponent.hp = opponent.maxHp * (0.15 + (opponent.stats.heart * 0.02));
+                opponent.sta = opponent.maxSta * 0.5;
+                opponent.state = 'idle'; opponent.localX = 0; opponent.localY = 0;
+                document.getElementById('kd-overlay').classList.add('hidden');
+                kd.active = false; gameState = 'FIGHT';
+            } else {
+                opponent.localY += (200 - opponent.localY) * 0.05;
+            }
+        }
+
+        document.getElementById('hud-p-hp').style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
+        document.getElementById('hud-o-hp').style.width = `${Math.max(0, (opponent.hp / opponent.maxHp) * 100)}%`;
+    }
+
+    function updateParticles() {
+        for(let i=particles.length-1; i>=0; i--) {
+            let p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.8; // Gravity
+            p.life -= p.decay;
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    function updateOpponent(dt) {
+        opponent.stateTimer -= dt;
+
+        let oppMaxReach = 70 + (opponent.stats.reach * 5.0) * opponent.build.scaleX;
+        let optimalDist = oppMaxReach - 15;
+        let oSpeed = (90 - (opponent.build.scaleX - 1)*40) * (dt/1000);
+        if (opponent.fightingStyle === 'outboxer') { optimalDist += 20; oSpeed *= 1.1; }
+        else if (opponent.fightingStyle === 'brawler') { optimalDist -= 10; oSpeed *= 0.85; }
+        else if (opponent.fightingStyle === 'swarmer') { optimalDist -= 20; oSpeed *= 1.25; }
+
+        if (opponent.state === 'idle' || opponent.state === 'blocking') {
+            let angle = Math.atan2(player.worldZ - opponent.worldZ, player.worldX - opponent.worldX);
+            if (view.dist > optimalDist + 15) {
+                opponent.worldX += Math.cos(angle) * oSpeed; opponent.worldZ += Math.sin(angle) * oSpeed;
+            } else if (view.dist < optimalDist - 15) {
+                opponent.worldX -= Math.cos(angle) * oSpeed * 0.6; opponent.worldZ -= Math.sin(angle) * oSpeed * 0.6;
+            } else {
+                let strafe = Math.sin(Date.now() * 0.001) * oSpeed * 0.6;
+                opponent.worldX += Math.cos(angle + Math.PI/2) * strafe; opponent.worldZ += Math.sin(angle + Math.PI/2) * strafe;
+            }
+        }
+
+        let oppDistCenter = Math.hypot(opponent.worldX, opponent.worldZ);
+        if (oppDistCenter > RING_RADIUS) {
+            let a = Math.atan2(opponent.worldZ, opponent.worldX);
+            opponent.worldX = Math.cos(a) * RING_RADIUS;
+            opponent.worldZ = Math.sin(a) * RING_RADIUS;
+        }
+
+        let tLX = 0; let tLY = 0;
+        if (opponent.state === 'dodging') {
+            if (opponent.dodgeDir === 2) { tLY = 80; } else { tLX = opponent.dodgeDir * 120; tLY = 20; }
+        } else if (opponent.state === 'windup') {
+            tLX = opponent.currentAttack === 'left' ? -30 : 30; tLY = -15;
+        } else if (opponent.state === 'hurt') {
+            tLY = -25; tLX = (Math.random()-0.5)*20;
+        }
+
+        opponent.localX += (tLX - opponent.localX) * 0.25; opponent.localY += (tLY - opponent.localY) * 0.25;
+
+        if (opponent.state !== 'punching' && opponent.sta < opponent.maxSta) opponent.sta += (opponent.stats.stamina * 0.08) * (dt/16);
+
+        if (opponent.stateTimer <= 0) {
+            if (['hurt', 'blocking', 'punching'].includes(opponent.state)) {
+                opponent.state = 'idle'; opponent.stateTimer = 400 + Math.random() * (1200 - opponent.stats.speed*25);
+            } else if (opponent.state === 'dodging') {
+                if (opponent.sta > 15 && view.dist <= oppMaxReach) {
+                    opponent.state = 'windup'; opponent.sta -= 12;
+                    opponent.currentAttack = opponent.dodgeDir === 1 ? 'right' : 'left';
+                    opponent.stateTimer = 220 + (opponent.build.scaleX*30);
+                } else { opponent.state = 'idle'; opponent.stateTimer = 300; }
+            } else if (opponent.state === 'windup') {
+                opponent.state = 'punching'; opponent.stateTimer = 300;
+
+                if (view.dist <= oppMaxReach) {
+                    if (player.dodgeState !== 'none' || Math.abs(player.leanX) > 100 || player.leanY > 80) {
+                        spawnText("SLIP!", 512 + (player.leanX < 0 || player.dodgeState === 'left' ? -100 : 100), 250, "#00a8ff");
+                        player.counterWindow = 600;
+                    } else if (!player.isBlocking) {
+                        let dmg = (opponent.stats.power * 1.3) + (Math.random() * 5);
+                        player.hp -= dmg; hitStopFrames = 3; flashDamage(); setCamShake(20, 0.08);
+                        if (player.hp <= 0) { player.hp = 0; triggerKnockdown('player'); }
+                    } else {
+                        player.hp -= (opponent.stats.power * 0.3); player.sta = Math.max(0, player.sta - 10); setCamShake(5, 0.01);
+                    }
+                } else {
+                        spawnText("WHIFF!", 512, 200, "#95a5a6");
+                        if (player.dodgeState !== 'none' || Math.abs(player.leanX) > 100 || player.leanY > 80) {
+                            player.counterWindow = 600;
+                        }
+                    }
+            } else if (opponent.state === 'idle') {
+                let aggroMod = opponent.fightingStyle === 'swarmer' ? 0.2 : (opponent.fightingStyle === 'outboxer' ? -0.1 : 0);
+                if (Math.random() < opponent.stats.aggro + aggroMod && opponent.sta > 20 && view.dist <= oppMaxReach + 10) {
+                    opponent.state = 'windup'; opponent.sta -= 15; opponent.currentAttack = Math.random() > 0.5 ? 'left' : 'right';
+                    opponent.stateTimer = Math.max(200, 650 - (opponent.stats.speed * 15)) + (opponent.build.scaleX*50);
+                    if (opponent.fightingStyle === 'brawler') opponent.stateTimer *= 1.3;
+                    else if (opponent.fightingStyle === 'swarmer') opponent.stateTimer *= 0.8;
+                } else if (Math.random() < opponent.stats.aggro + 0.3) {
+                    opponent.state = 'blocking'; opponent.stateTimer = 600 + Math.random() * 800;
+                } else { opponent.stateTimer = 300; }
+            }
+        }
+    }
+
+    // --- DRAW ENGINE ---
+    function draw() {
+        if (gameState !== 'FIGHT' && gameState !== 'KNOCKDOWN') return;
+
+        ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (gameState === 'KNOCKDOWN' && kd.fighter === 'player') {
+            let grd = ctx.createRadialGradient(512, 384, 100, 512, 384, 800);
+            grd.addColorStop(0, 'rgba(0,0,0,0)'); grd.addColorStop(1, 'rgba(232,65,24,0.4)');
+            ctx.fillStyle = grd; ctx.fillRect(0,0, 1024, 768);
+        }
+
+        ctx.save();
+        ctx.translate(512 + camShake.x, 384 + camShake.y);
+        ctx.rotate(player.tilt + camShake.rot);
+        ctx.translate(-512, -384);
+
+        drawVolumetricLights();
+        drawRing3D();
+
+        ctx.save();
+        ctx.translate(view.screenX, view.screenY);
+        ctx.scale(view.scale, view.scale);
+
+        if (kd.active && kd.fighter === 'opponent') {
+            ctx.translate(0, opponent.localY);
+            ctx.rotate(Math.PI / 2.2);
+            ctx.translate(0, -opponent.localY);
+        }
+
+        drawOpponentProcedural();
+        ctx.restore();
+
+        // Safely call drawing functions
+        drawParticles();
+
+        if (!kd.active || kd.fighter === 'opponent') {
+            drawPlayerDetailed();
+        }
+
+        ctx.restore();
+
+        // if (gameState === 'FIGHT') drawCrosshair();
+    }
+
+    function drawVolumetricLights() {
+        let cx = 512 - ((mouse.x - 512)*0.05); let cy = 200 - ((mouse.y - 384)*0.05);
+        let grd = ctx.createRadialGradient(cx, cy, 0, cx, cy+400, 600);
+        grd.addColorStop(0, 'rgba(255,255,255,0.15)'); grd.addColorStop(0.5, 'rgba(255,255,255,0.02)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grd; ctx.beginPath(); ctx.moveTo(cx-150, 0); ctx.lineTo(cx+150, 0); ctx.lineTo(1024, 768); ctx.lineTo(0, 768); ctx.fill();
+    }
+
+    function drawRing3D() {
+        let cx = player.worldX;
+        let cz = player.worldZ;
+        let cy = -120;
+        let fov = 350;
+        let horizon = 384;
+
+        let bgGrd = ctx.createLinearGradient(0, horizon - 100, 0, 768);
+        bgGrd.addColorStop(0, '#11131a'); bgGrd.addColorStop(1, '#2c3e50');
+        ctx.fillStyle = bgGrd;
+        ctx.fillRect(0, horizon - 100, 1024, 768 - (horizon - 100));
+
+        // Calculate camera rotation to face opponent
+        let dx = opponent.worldX - player.worldX;
+        let dz = opponent.worldZ - player.worldZ;
+        let angle = Math.atan2(dz, dx);
+
+        // In 3D space, facing directly along Z axis means angle = PI/2.
+        // We want to rotate the scene so that the opponent is always in front (along positive Z).
+        let rot = Math.PI/2 - angle;
+        let cosR = Math.cos(rot);
+        let sinR = Math.sin(rot);
+
+        function drawLine3D(x1, y1, z1, x2, y2, z2, color, width) {
+            let px1 = x1 - cx; let pz1 = z1 - cz;
+            let px2 = x2 - cx; let pz2 = z2 - cz;
+
+            let rx1 = px1 * cosR - pz1 * sinR;
+            let rz1 = px1 * sinR + pz1 * cosR;
+
+            let rx2 = px2 * cosR - pz2 * sinR;
+            let rz2 = px2 * sinR + pz2 * cosR;
+
+            let ry1 = y1 - cy;
+            let ry2 = y2 - cy;
+
+            if (rz1 <= 10 && rz2 <= 10) return;
+            if (rz1 <= 10) {
+                let t = (10 - rz1) / (rz2 - rz1);
+                rx1 = rx1 + (rx2 - rx1) * t; ry1 = ry1 + (ry2 - ry1) * t; rz1 = 10;
+            } else if (rz2 <= 10) {
+                let t = (10 - rz2) / (rz1 - rz2);
+                rx2 = rx2 + (rx1 - rx2) * t; ry2 = ry2 + (ry1 - ry2) * t; rz2 = 10;
+            }
+            let sx1 = 512 + (rx1 / rz1) * fov; let sy1 = horizon + (ry1 / rz1) * fov;
+            let sx2 = 512 + (rx2 / rz2) * fov; let sy2 = horizon + (ry2 / rz2) * fov;
+            ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath(); ctx.moveTo(sx1, sy1); ctx.lineTo(sx2, sy2); ctx.stroke();
+        }
+
+        const R = 400; const FLOOR = 150; // Increased R to 400 so opponent doesn't go outside
+        for(let x=-R; x<=R; x+=50) drawLine3D(x, FLOOR, -R, x, FLOOR, R, 'rgba(255,255,255,0.05)', 2);
+        for(let z=-R; z<=R; z+=50) drawLine3D(-R, FLOOR, z, R, FLOOR, z, 'rgba(255,255,255,0.05)', 2);
+
+        drawLine3D(-R, FLOOR, -R, R, FLOOR, -R, '#fff', 4);
+        drawLine3D(R, FLOOR, -R, R, FLOOR, R, '#fff', 4);
+        drawLine3D(R, FLOOR, R, -R, FLOOR, R, '#fff', 4);
+        drawLine3D(-R, FLOOR, R, -R, FLOOR, -R, '#fff', 4);
+
+        let posts = [ [-R, -R], [R, -R], [R, R], [-R, R] ];
+        posts.forEach(p => {
+            drawLine3D(p[0], FLOOR, p[1], p[0], -80, p[1], '#444', 15);
+            drawLine3D(p[0], FLOOR, p[1], p[0], -80, p[1], '#222', 10);
+        });
+
+        let ropeHeights = [100, 40, -20, -80];
+        ropeHeights.forEach((y, i) => {
+            let color = i % 2 === 0 ? '#8c160b' : '#fff';
+            drawLine3D(-R, y, R, R, y, R, color, 4);
+            drawLine3D(-R, y, -R, R, y, -R, color, 4);
+            drawLine3D(-R, y, -R, -R, y, R, color, 4);
+            drawLine3D(R, y, -R, R, y, R, color, 4);
+        });
+    }
+
+    function drawOpponentProcedural() {
+        let ox = opponent.localX; let oy = opponent.localY;
+        let b = opponent.build; let dmg = opponent.damageFactor;
+
+
+
+        let skinBase = mixColor(opponent.skin.base, '#8c1a1a', dmg * 0.5);
+        let skinDark = mixColor(opponent.skin.dark, '#3a0000', dmg * 0.6);
+        let skinHigh = opponent.skin.high;
+
+        let sW = 95 * b.scaleX;
+        let wW = (65 * b.scaleX) + (50 * b.belly);
+        let bH = 190 * b.scaleY;
+
+        ctx.shadowColor = 'rgba(0, 150, 255, 0.4)'; ctx.shadowBlur = 20;
+
+        // Solid Neck Base (Drawn before torso so torso overlaps it)
+        let neckWidth = 22 * b.scaleX + (8 * b.muscle);
+        let neckHeight = 45 * b.scaleY;
+        let neckGrd = ctx.createLinearGradient(ox - neckWidth, oy, ox + neckWidth, oy);
+        neckGrd.addColorStop(0, skinDark); neckGrd.addColorStop(0.5, skinBase); neckGrd.addColorStop(1, skinDark);
+        ctx.fillStyle = neckGrd;
+        ctx.fillRect(ox - neckWidth, oy - neckHeight, neckWidth * 2, neckHeight + 60);
+
+        let bodyGrd = ctx.createRadialGradient(ox, oy+80, 20, ox, oy+100, 140);
+        bodyGrd.addColorStop(0, skinHigh); bodyGrd.addColorStop(0.3, skinBase); bodyGrd.addColorStop(1, skinDark);
+        ctx.fillStyle = bodyGrd;
+
+        ctx.beginPath(); ctx.moveTo(ox - sW, oy + 10); ctx.quadraticCurveTo(ox, oy + 45, ox + sW, oy + 10);
+        ctx.bezierCurveTo(ox + sW + 10, oy + 60, ox + wW + 10, oy + bH - 40, ox + wW, oy + bH);
+        ctx.lineTo(ox - wW, oy + bH);
+        ctx.bezierCurveTo(ox - wW - 10, oy + bH - 40, ox - sW - 10, oy + 60, ox - sW, oy + 10); ctx.fill();
+        ctx.shadowBlur = 0;
+
+        let muscAlpha = Math.max(0, b.muscle - (b.belly * 1.5));
+        ctx.strokeStyle = `rgba(0,0,0,${0.4 * muscAlpha})`; ctx.lineWidth = 4 * b.muscle;
+
+        let pecY = oy + 45 + (b.belly * 15);
+        ctx.beginPath(); ctx.moveTo(ox - (sW*0.9), pecY);
+        ctx.bezierCurveTo(ox - (sW*0.4), pecY + 40, ox, pecY + 40, ox, pecY + 25);
+        ctx.bezierCurveTo(ox, pecY + 40, ox + (sW*0.4), pecY + 40, ox + (sW*0.9), pecY); ctx.stroke();
+
+        // Inner/Upper Pec details
+        if (muscAlpha > 0.3) {
+            ctx.lineWidth = 2 * muscAlpha;
+            ctx.beginPath(); ctx.moveTo(ox, pecY + 25); ctx.lineTo(ox, pecY + 5); ctx.stroke(); // Cleavage
+            ctx.beginPath(); ctx.moveTo(ox - sW*0.1, pecY + 20); ctx.quadraticCurveTo(ox - sW*0.4, pecY + 15, ox - sW*0.7, pecY - 5); ctx.stroke(); // Left upper pec
+            ctx.beginPath(); ctx.moveTo(ox + sW*0.1, pecY + 20); ctx.quadraticCurveTo(ox + sW*0.4, pecY + 15, ox + sW*0.7, pecY - 5); ctx.stroke(); // Right upper pec
+        }
+
+        // Trapezius (Traps)
+        ctx.strokeStyle = `rgba(0,0,0,${0.2 * b.muscle})`; ctx.lineWidth = 4 * b.muscle;
+        ctx.beginPath(); ctx.moveTo(ox - 25, oy - 20); ctx.quadraticCurveTo(ox - sW*0.6, oy - 10, ox - sW, oy + 10); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + 25, oy - 20); ctx.quadraticCurveTo(ox + sW*0.6, oy - 10, ox + sW, oy + 10); ctx.stroke();
+
+        // Deltoids (Shoulders)
+        ctx.beginPath(); ctx.moveTo(ox - sW, oy + 10); ctx.quadraticCurveTo(ox - sW - 15, oy + 40, ox - sW + 10, oy + 70); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + sW, oy + 10); ctx.quadraticCurveTo(ox + sW + 15, oy + 40, ox + sW - 10, oy + 70); ctx.stroke();
+
+        // Collarbones
+        ctx.strokeStyle = `rgba(0,0,0,${0.3 * Math.max(0.5, b.muscle)})`; ctx.lineWidth = 3 * Math.max(0.8, b.muscle);
+        ctx.beginPath(); ctx.moveTo(ox - sW + 20, oy + 25); ctx.quadraticCurveTo(ox - sW/2, oy + 35, ox - 10, oy + 32); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + sW - 20, oy + 25); ctx.quadraticCurveTo(ox + sW/2, oy + 35, ox + 10, oy + 32); ctx.stroke();
+
+        // Nipples
+        ctx.fillStyle = mixColor(skinDark, '#500', 0.5);
+        ctx.beginPath(); ctx.ellipse(ox - sW*0.45, pecY + 15, 4 + b.belly*2, 3 + b.belly*2, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(ox + sW*0.45, pecY + 15, 4 + b.belly*2, 3 + b.belly*2, 0, 0, Math.PI*2); ctx.fill();
+
+        // Belly button
+        let navelY = oy + bH - 45 + (b.belly*15);
+        ctx.fillStyle = `rgba(0,0,0,0.5)`;
+        ctx.beginPath(); ctx.ellipse(ox, navelY, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = skinHigh; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(ox, navelY-1, 5, Math.PI, 0); ctx.stroke();
+
+
+        if (muscAlpha > 0.1) {
+            ctx.lineWidth = 2.5 * muscAlpha;
+            ctx.beginPath(); ctx.moveTo(ox, pecY + 25); ctx.lineTo(ox, pecY + 120); ctx.stroke();
+            // Serratus anterior (ribs)
+
+            // Obliques
+            ctx.lineWidth = 2 * muscAlpha;
+            ctx.beginPath(); ctx.moveTo(ox - sW*0.6, pecY + 80); ctx.quadraticCurveTo(ox - sW*0.8, pecY + 110, ox - wW*0.9, pecY + 140); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(ox + sW*0.6, pecY + 80); ctx.quadraticCurveTo(ox + sW*0.8, pecY + 110, ox + wW*0.9, pecY + 140); ctx.stroke();
+
+            ctx.lineWidth = 1.5 * muscAlpha;
+            for(let i=0; i<3; i++) {
+                let ribY = pecY + 30 + (i*15);
+                ctx.beginPath(); ctx.moveTo(ox - sW*0.8, ribY); ctx.quadraticCurveTo(ox - sW*0.6, ribY+5, ox - sW*0.4, ribY); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(ox + sW*0.8, ribY); ctx.quadraticCurveTo(ox + sW*0.6, ribY+5, ox + sW*0.4, ribY); ctx.stroke();
+            }
+
+            ctx.lineWidth = 2.5 * muscAlpha;
+            // Linea alba (middle ab line)
+            ctx.beginPath(); ctx.moveTo(ox, pecY + 25); ctx.lineTo(ox, navelY - 5); ctx.stroke();
+
+            for(let i=0; i<3; i++) {
+                let abY = pecY + 50 + (i*25);
+                ctx.beginPath(); ctx.moveTo(ox-25*b.scaleX, abY); ctx.quadraticCurveTo(ox, abY+10, ox+25*b.scaleX, abY); ctx.stroke();
+                // Add vertical ab lines for realistic six-pack
+                ctx.beginPath(); ctx.moveTo(ox-25*b.scaleX, abY); ctx.lineTo(ox-22*b.scaleX, abY-15); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(ox+25*b.scaleX, abY); ctx.lineTo(ox+22*b.scaleX, abY-15); ctx.stroke();
+            }
+        }
+
+        let trY = oy + bH - 20; let tColor = opponent.color; let tDark = mixColor(tColor, '#000', 0.6);
+        let trGrd = ctx.createLinearGradient(ox - wW, trY, ox + wW, trY);
+        trGrd.addColorStop(0, tDark); trGrd.addColorStop(0.5, tColor); trGrd.addColorStop(1, tDark);
+
+        // Draw Legs (behind the shorts)
+        let bounce = kd.active ? 0 : Math.sin(Date.now()*0.005)*5;
+        let legL = ox - wW*0.6; let legR = ox + wW*0.6;
+        let kneeY = trY + 120 + bounce;
+        let ankleY = trY + 220;
+
+        ctx.lineWidth = 45 * b.scaleX; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        // Left Leg (Back)
+        ctx.strokeStyle = skinDark; // shaded darker as it's slightly behind
+        ctx.beginPath(); ctx.moveTo(legL, trY); ctx.lineTo(legL - 10, kneeY); ctx.lineTo(legL - 5, ankleY); ctx.stroke();
+        // Left shoe
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(legL - 5, ankleY + 10, 30, 15, 0, 0, Math.PI*2); ctx.fill();
+
+        // Right Leg (Front)
+        ctx.strokeStyle = skinBase;
+        ctx.beginPath(); ctx.moveTo(legR, trY); ctx.lineTo(legR + 15, kneeY); ctx.lineTo(legR + 10, ankleY); ctx.stroke();
+        // Right Leg Highlight
+        ctx.strokeStyle = skinHigh; ctx.lineWidth = 10 * b.scaleX;
+        ctx.beginPath(); ctx.moveTo(legR, trY + 20); ctx.lineTo(legR + 15, kneeY); ctx.lineTo(legR + 10, ankleY - 20); ctx.stroke();
+        // Right shoe
+        ctx.fillStyle = '#222'; ctx.beginPath(); ctx.ellipse(legR + 10, ankleY + 10, 35, 18, -0.1, 0, Math.PI*2); ctx.fill();
+
+        // Draw Shorts
+        ctx.fillStyle = trGrd; ctx.beginPath();
+        ctx.moveTo(ox - wW - 5, trY); ctx.quadraticCurveTo(ox, trY + 20, ox + wW + 5, trY);
+        ctx.lineTo(ox + wW + 20, trY + 80); ctx.lineTo(ox - wW - 20, trY + 80); ctx.fill();
+
+
+        // Sweat Sheen (increases as stamina drops)
+        let sweatAlpha = Math.max(0, (100 - opponent.sta) / 100) * 0.3;
+        if (sweatAlpha > 0.05) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${sweatAlpha})`;
+            ctx.beginPath(); ctx.ellipse(ox - sW*0.5, oy + 40, sW*0.2, 10, -0.2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(ox + sW*0.5, oy + 40, sW*0.2, 10, 0.2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(ox, oy + 80, 10, 30, 0, 0, Math.PI*2); ctx.fill();
+        }
+
+        ctx.fillStyle = '#111'; ctx.fillRect(ox - wW - 10, trY - 10, (wW*2) + 20, 25);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(ox - wW - 10, trY - 10, (wW*2) + 20, 25);
+
+        let headRot = opponent.state === 'hurt' ? -0.2 : (opponent.state === 'windup' ? 0.1 : 0);
+
+        // Neck Muscles (Sternocleidomastoid)
+        ctx.strokeStyle = `rgba(0,0,0,${0.2 * b.muscle})`; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(ox - 12, oy); ctx.lineTo(ox - (neckWidth - 5), oy - 30*b.scaleY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + 12, oy); ctx.lineTo(ox + (neckWidth - 5), oy - 30*b.scaleY); ctx.stroke();
+
+        ctx.save(); ctx.translate(ox, oy - 40 * b.scaleY); ctx.rotate(headRot);
+
+        let headGrd = ctx.createRadialGradient(0, -10, 10, 0, 10, 60);
+        headGrd.addColorStop(0, skinHigh); headGrd.addColorStop(0.5, skinBase); headGrd.addColorStop(1, skinDark);
+        ctx.fillStyle = headGrd;
+
+        let hw = 35 * b.jaw; let hh = 50 * b.scaleY;
+
+        // Ears
+        ctx.fillStyle = skinBase; ctx.strokeStyle = skinDark; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(-hw, 5, 6, 12, -0.2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(hw, 5, 6, 12, 0.2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath(); ctx.ellipse(-hw-1, 5, 2, 6, -0.2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hw+1, 5, 2, 6, 0.2, 0, Math.PI*2); ctx.fill();
+
+        // Ear Cartilage Detail
+        ctx.strokeStyle = `rgba(0,0,0,0.3)`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(-hw+1, 2, 3, Math.PI*0.5, Math.PI*1.5); ctx.stroke();
+        ctx.beginPath(); ctx.arc(hw-1, 2, 3, -Math.PI*0.5, Math.PI*0.5); ctx.stroke();
+        ctx.fillStyle = headGrd; // Reset
+
+        ctx.beginPath(); ctx.moveTo(-hw, -hh); ctx.quadraticCurveTo(0, -hh - 15, hw, -hh);
+        ctx.bezierCurveTo(hw + 5, -10, hw - 5, 25, hw * 0.6, 35);
+        ctx.quadraticCurveTo(0, 45, -hw * 0.6, 35);
+        ctx.bezierCurveTo(-hw + 5, 25, -hw - 5, -10, -hw, -hh); ctx.fill();
+
+        // Jawline shadow
+        ctx.strokeStyle = skinDark; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(-hw*0.9, 5); ctx.quadraticCurveTo(0, 40, hw*0.9, 5); ctx.stroke();
+
+        // Cheekbones
+        ctx.fillStyle = `rgba(0,0,0,${0.15 * b.scaleY})`;
+        ctx.beginPath(); ctx.ellipse(-hw*0.6, 5, hw*0.3, 8, -0.4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hw*0.6, 5, hw*0.3, 8, 0.4, 0, Math.PI*2); ctx.fill();
+
+        // Eye Sockets (Orbital bone shadow)
+        ctx.fillStyle = `rgba(0,0,0,0.15)`;
+        ctx.beginPath(); ctx.ellipse(-15, -10 * b.scaleY, 12, 8, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(15, -10 * b.scaleY, 12, 8, 0, 0, Math.PI*2); ctx.fill();
+
+        // Forehead Wrinkles
+        ctx.strokeStyle = `rgba(0,0,0,0.15)`; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(-15, -30 * b.scaleY); ctx.quadraticCurveTo(0, -27 * b.scaleY, 15, -30 * b.scaleY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-20, -35 * b.scaleY); ctx.quadraticCurveTo(0, -32 * b.scaleY, 20, -35 * b.scaleY); ctx.stroke();
+
+        // Nasolabial Folds (Smile Lines)
+        ctx.beginPath(); ctx.moveTo(-8, -10 * b.scaleY + 22); ctx.quadraticCurveTo(-12, 18, -10, 25); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(8, -10 * b.scaleY + 22); ctx.quadraticCurveTo(12, 18, 10, 25); ctx.stroke();
+
+        // Chin Cleft/Shadow
+        ctx.beginPath(); ctx.moveTo(-6, 33); ctx.quadraticCurveTo(0, 36, 6, 33); ctx.stroke();
+
+        // Facial Hair
+        ctx.fillStyle = b.hairColor || '#111';
+        if (b.facialHair === 'stubble') {
+            ctx.globalAlpha = 0.3;
+            ctx.beginPath(); ctx.moveTo(-hw*0.8, 10); ctx.quadraticCurveTo(0, 45, hw*0.8, 10); ctx.lineTo(hw*0.5, 30); ctx.quadraticCurveTo(0, 35, -hw*0.5, 30); ctx.fill();
+            ctx.globalAlpha = 1.0;
+        } else if (b.facialHair === 'goatee') {
+            ctx.beginPath(); ctx.ellipse(0, 32, 12, 10, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillRect(-8, 20, 16, 5); // mustache
+            ctx.clearRect(-5, 25, 10, 5); // mouth cutout
+        } else if (b.facialHair === 'beard') {
+            ctx.beginPath(); ctx.moveTo(-hw*0.9, 5); ctx.quadraticCurveTo(0, 55, hw*0.9, 5); ctx.lineTo(hw*0.7, 20); ctx.quadraticCurveTo(0, 35, -hw*0.7, 20); ctx.fill();
+            ctx.fillRect(-12, 18, 24, 6); // mustache
+        }
+
+
+        // Draw Hair
+        ctx.fillStyle = b.hairColor || '#111';
+        if (b.hair === 'buzzcut') {
+            ctx.beginPath(); ctx.ellipse(0, -hh - 12, hw + 2, 8, 0, 0, Math.PI*2); ctx.fill();
+        } else if (b.hair === 'mohawk') {
+            ctx.beginPath(); ctx.moveTo(-15, -hh - 10); ctx.lineTo(-10, -hh - 40); ctx.lineTo(0, -hh - 50); ctx.lineTo(10, -hh - 40); ctx.lineTo(15, -hh - 10); ctx.fill();
+        } else if (b.hair === 'afro') {
+            ctx.beginPath(); ctx.arc(-20, -hh - 15, 20, 0, Math.PI*2); ctx.arc(0, -hh - 25, 25, 0, Math.PI*2); ctx.arc(20, -hh - 15, 20, 0, Math.PI*2); ctx.fill();
+        } else if (b.hair === 'fade') {
+            ctx.beginPath(); ctx.ellipse(0, -hh - 15, hw - 5, 12, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillRect(-hw, -hh, hw*2, 15);
+        }
+
+
+        // Advanced Facial Damage
+        if (dmg > 0.2) {
+            // Swollen left cheek
+            ctx.fillStyle = `rgba(75, 0, 130, ${dmg * 0.5})`;
+            ctx.beginPath(); ctx.ellipse(-20, 5, 12, 18, 0.2, 0, Math.PI*2); ctx.fill();
+        }
+        if (dmg > 0.4) {
+            // Swollen right eye
+            ctx.fillStyle = `rgba(100, 20, 100, ${dmg * 0.7})`;
+            ctx.beginPath(); ctx.ellipse(15, -15, 12, 10, -0.2, 0, Math.PI*2); ctx.fill();
+            // Minor cut on lip
+            ctx.fillStyle = `rgba(180, 0, 0, ${dmg})`;
+            ctx.beginPath(); ctx.ellipse(-5, 18, 4, 1.5, 0.2, 0, Math.PI*2); ctx.fill();
+        }
+        if (dmg > 0.7) {
+            // Deep cut left eyebrow
+            ctx.fillStyle = `rgba(139, 0, 0, ${dmg})`;
+            ctx.beginPath(); ctx.ellipse(-20, -25, 8, 2.5, -0.2, 0, Math.PI*2); ctx.fill();
+            // Blood dripping from eyebrow
+            ctx.strokeStyle = `rgba(150, 0, 0, ${dmg * 0.8})`; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-20, -25); ctx.quadraticCurveTo(-22, -15, -20, -5); ctx.stroke();
+            // Cut on right cheek
+            ctx.fillStyle = `rgba(160, 0, 0, ${dmg})`;
+            ctx.beginPath(); ctx.ellipse(20, -5, 6, 2, 0.5, 0, Math.PI*2); ctx.fill();
+        }
+        if (dmg > 0.9) {
+            // Very swollen left eye
+            ctx.fillStyle = `rgba(50, 10, 50, 0.9)`;
+            ctx.beginPath(); ctx.ellipse(-15, -12, 10, 12, 0, 0, Math.PI*2); ctx.fill();
+        }
+
+        let eyeY = -10 * b.scaleY; let ew = 22 * b.jaw;
+
+        // Eye bags / Bruising
+        if (dmg > 0.1) {
+            ctx.fillStyle = `rgba(50, 0, 50, ${Math.min(0.6, dmg)})`;
+            ctx.beginPath(); ctx.ellipse(-15, eyeY + 6, 8, 4, 0.2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(15, eyeY + 6, 8, 4, -0.2, 0, Math.PI*2); ctx.fill();
+        }
+
+
+        // Nose
+        ctx.fillStyle = skinDark;
+        ctx.beginPath(); ctx.moveTo(0, eyeY + 5); ctx.lineTo(-6, eyeY + 22); ctx.lineTo(6, eyeY + 22); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; // Nostrils
+        ctx.beginPath(); ctx.ellipse(-4, eyeY + 24, 3, 1.5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(4, eyeY + 24, 3, 1.5, 0, 0, Math.PI*2); ctx.fill();
+        // Nose highlight
+        ctx.strokeStyle = skinHigh; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, eyeY + 5); ctx.lineTo(0, eyeY + 20); ctx.stroke();
+
+        let mouthY = 18;
+        if (opponent.state === 'windup') {
+            // Angry eyes
+            ctx.fillStyle = '#fff'; // sclera
+            ctx.beginPath(); ctx.ellipse(-15, eyeY, 6, 3, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(15, eyeY, 6, 3, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000'; // pupil
+            ctx.beginPath(); ctx.arc(-15, eyeY, 2.5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(15, eyeY, 2.5, 0, Math.PI*2); ctx.fill();
+            // Eyebrows furrowed
+            ctx.strokeStyle = '#111'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(-25, eyeY-5); ctx.lineTo(-10, eyeY+2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(25, eyeY-5); ctx.lineTo(10, eyeY+2); ctx.stroke();
+
+            // Angry open mouth
+            ctx.fillStyle = '#222'; // inside mouth
+            ctx.beginPath(); ctx.ellipse(0, mouthY+4, 12, 6, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#eee'; // teeth
+            ctx.fillRect(-8, mouthY, 16, 3);
+            ctx.fillRect(-6, mouthY+7, 12, 2);
+        } else if (opponent.state === 'hurt' || (kd.active && kd.fighter==='opponent')) {
+            // Hurt eyes (wide)
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(-15, eyeY, 6, 0, Math.PI*2); ctx.arc(15, eyeY, 6, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(-15, eyeY, 2.5, 0, Math.PI*2); ctx.arc(15, eyeY, 2.5, 0, Math.PI*2); ctx.fill();
+            // Eyebrows raised
+            ctx.strokeStyle = '#111'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(-22, eyeY-8); ctx.quadraticCurveTo(-15, eyeY-12, -8, eyeY-6); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(22, eyeY-8); ctx.quadraticCurveTo(15, eyeY-12, 8, eyeY-6); ctx.stroke();
+
+            // Hurt mouth
+            ctx.fillStyle = '#333';
+            ctx.beginPath(); ctx.ellipse(0, mouthY+6, 10, 12, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#900'; // blood/tongue
+            ctx.beginPath(); ctx.ellipse(0, mouthY+12, 6, 4, 0, 0, Math.PI*2); ctx.fill();
+        } else {
+            // Normal eyes
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.ellipse(-15, eyeY, 5, 2.5, 0, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(15, eyeY, 5, 2.5, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#111';
+            ctx.beginPath(); ctx.arc(-15, eyeY, 2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(15, eyeY, 2, 0, Math.PI*2); ctx.fill();
+            // Eyebrows
+            ctx.strokeStyle = '#111'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(-22, eyeY-6); ctx.quadraticCurveTo(-15, eyeY-8, -8, eyeY-5); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(22, eyeY-6); ctx.quadraticCurveTo(15, eyeY-8, 8, eyeY-5); ctx.stroke();
+
+            // Normal mouth
+            ctx.fillStyle = mixColor(skinDark, '#500', 0.4); // Lips
+            ctx.beginPath(); ctx.ellipse(0, mouthY+2, 10, 3, 0, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-10, mouthY+2); ctx.quadraticCurveTo(0, mouthY+4, 10, mouthY+2); ctx.stroke();
+        }
+        ctx.restore();
+
+        let lx, ly, rx, ry;
+        if (opponent.state === 'blocking') {
+            lx = ox - 35*b.scaleX; ly = oy - 20; rx = ox + 35*b.scaleX; ry = oy - 20;
+        } else if (opponent.state === 'windup' || opponent.state === 'punching') {
+            let p = opponent.state === 'punching' ? 1 : 0.2; let ease = 1 - Math.pow(1 - p, 3);
+            let hookWide = 60; let hookTravel = 70; let hookDrop = 180;
+                if (opponent.fightingStyle === 'brawler') { hookWide = 90; hookTravel = 100; hookDrop = 200; }
+                else if (opponent.fightingStyle === 'outboxer') { hookWide = 40; hookTravel = 45; hookDrop = 140; }
+
+                if (opponent.currentAttack === 'left') {
+                    lx = ox - hookWide + (ease*hookTravel); ly = oy + 40 + (ease*hookDrop); rx = ox + 45*b.scaleX; ry = oy + 60;
+                } else {
+                    lx = ox - 45*b.scaleX; ly = oy + 60; rx = ox + hookWide - (ease*hookTravel); ry = oy + 40 + (ease*hookDrop);
+                }
+        } else {
+            let bounce = kd.active ? 0 : Math.sin(Date.now()*0.005)*8;
+            lx = ox - 55*b.scaleX; ly = oy + 50 + bounce; rx = ox + 55*b.scaleX; ry = oy + 50 - bounce;
+            if(kd.active && kd.fighter === 'opponent') { lx -= 20; rx += 20; }
+        }
+
+        let rL = opponent.state==='punching' && opponent.currentAttack==='left' ? 65 : 45;
+        let rR = opponent.state==='punching' && opponent.currentAttack==='right' ? 65 : 45;
+
+        ctx.strokeStyle = skinDark; ctx.lineWidth = 35 * b.muscle; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(ox - sW + 5, oy + 20); ctx.lineTo(lx, ly-10); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + sW - 5, oy + 20); ctx.lineTo(rx, ry-10); ctx.stroke();
+
+        // Bicep/Tricep muscle definition lines
+        ctx.strokeStyle = `rgba(0,0,0,${0.3 * b.muscle})`; ctx.lineWidth = 4 * b.muscle;
+
+        // Left arm muscles
+        let midLx = (ox - sW + 5 + lx) / 2; let midLy = (oy + 20 + ly - 10) / 2;
+        let lAngle = Math.atan2((ly - 10) - (oy + 20), lx - (ox - sW + 5));
+        ctx.save(); ctx.translate(midLx, midLy); ctx.rotate(lAngle);
+        ctx.beginPath(); ctx.moveTo(-15, -8); ctx.quadraticCurveTo(0, -15, 15, -8); ctx.stroke(); // Bicep bump
+        ctx.beginPath(); ctx.moveTo(-15, 8); ctx.quadraticCurveTo(0, 15, 15, 8); ctx.stroke();  // Tricep bump
+        ctx.restore();
+
+        // Right arm muscles
+        let midRx = (ox + sW - 5 + rx) / 2; let midRy = (oy + 20 + ry - 10) / 2;
+        let rAngle = Math.atan2((ry - 10) - (oy + 20), rx - (ox + sW - 5));
+        ctx.save(); ctx.translate(midRx, midRy); ctx.rotate(rAngle);
+        ctx.beginPath(); ctx.moveTo(-15, -8); ctx.quadraticCurveTo(0, -15, 15, -8); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-15, 8); ctx.quadraticCurveTo(0, 15, 15, 8); ctx.stroke();
+        ctx.restore();
+
+        drawDetailedGlove(lx, ly, rL, opponent.color);
+        drawDetailedGlove(rx, ry, rR, opponent.color);
+
+        ctx.globalCompositeOperation = "source-over";
+    }
+
+    function drawPlayerDetailed() {
+        if (player.isBlocking) {
+            if (player.blockStyle === 'philly_shell') {
+                if (player.handedness === 'orthodox') {
+                    drawDetailedGlove(512, 600, 140, player.color); // Left arm low across body
+                    drawDetailedGlove(674, 450, 140, player.color); // Right hand high
+                } else {
+                    drawDetailedGlove(350, 450, 140, player.color); // Left hand high
+                    drawDetailedGlove(512, 600, 140, player.color); // Right arm low across body
+                }
+            } else if (player.blockStyle === 'high_guard') {
+                drawDetailedGlove(450, 420, 140, player.color); // Left very high
+                drawDetailedGlove(574, 420, 140, player.color); // Right very high
+            } else if (player.blockStyle === 'cross_armed') {
+                drawDetailedGlove(600, 550, 140, player.color); // Left crossed right
+                drawDetailedGlove(424, 550, 140, player.color); // Right crossed left
+            } else {
+                drawDetailedGlove(350, 500, 140, player.color);
+                drawDetailedGlove(674, 500, 140, player.color);
+            }
+            return;
+        }
+
+        let skinBase = player.skin.base;
+        let skinDark = player.skin.dark;
+        let skinHigh = player.skin.high;
+
+        let dodgeX = -player.dodgeOffset * 0.4;
+        let dodgeY = Math.abs(player.dodgeOffset) * 0.1;
+
+        // Draw Player Shoulders/Torso Silhouette
+        ctx.fillStyle = skinBase;
+        ctx.strokeStyle = skinDark;
+        ctx.lineWidth = 15;
+        ctx.lineJoin = 'round';
+
+        // Scale based on stats (Power mostly affects width/thickness)
+        let buildScale = 1 + (player.stats.power - 10) * 0.05;
+        let armThickness = 25 * buildScale;
+
+        // Stance Specific Shoulders
+        let isOrthodox = player.handedness === 'orthodox';
+
+        // Left shoulder
+        let leftShoulderY = isOrthodox ? 580 : 680;
+        leftShoulderY -= (buildScale - 1) * 30; // higher shoulders
+        let leftShoulderW = (isOrthodox ? 280 : 200) * buildScale;
+        ctx.beginPath();
+        ctx.moveTo(0, 768);
+        ctx.quadraticCurveTo(leftShoulderW/2 + dodgeX, leftShoulderY + dodgeY, leftShoulderW + dodgeX, 768);
+        ctx.fill(); ctx.stroke();
+
+        // Right shoulder
+        let rightShoulderY = isOrthodox ? 680 : 580;
+        rightShoulderY -= (buildScale - 1) * 30;
+        let rightShoulderW = (isOrthodox ? 200 : 280) * buildScale;
+        ctx.beginPath();
+        ctx.moveTo(1024, 768);
+        ctx.quadraticCurveTo(1024 - rightShoulderW/2 + dodgeX, rightShoulderY + dodgeY, 1024 - rightShoulderW + dodgeX, 768);
+        ctx.fill(); ctx.stroke();
+
+        ['left', 'right'].forEach(side => {
+            let arm = player.arms[side];
+
+            let thrustX = arm.state === 'punching' ? Math.sin(arm.progress * Math.PI) * (side === 'left' ? 30 : -30) : 0;
+            let thrustY = arm.state === 'punching' ? -Math.sin(arm.progress * Math.PI) * 30 : 0;
+
+            let baseX = (side === 'left' ? 250 : 774) + dodgeX + thrustX;
+            let baseY = 750 + dodgeY + thrustY;
+
+            // Apply idle positions based on style and handedness
+            if (arm.state === 'idle') {
+                if (player.combatStyle === 'peekaboo') {
+                    baseX = (side === 'left' ? 450 : 574) + dodgeX;
+                    baseY = 600 + dodgeY;
+                } else if (player.combatStyle === 'showboat') {
+                    baseX = (side === 'left' ? 150 : 874) + dodgeX;
+                    baseY = 850 + dodgeY;
+                } else if (player.combatStyle === 'mayweather') {
+                    if (player.handedness === 'orthodox') {
+                        if (side === 'left') { baseX = 450 + dodgeX; baseY = 780 + dodgeY; } // Low across
+                        else { baseX = 700 + dodgeX; baseY = 650 + dodgeY; } // High near face
+                    } else {
+                        if (side === 'right') { baseX = 574 + dodgeX; baseY = 780 + dodgeY; }
+                        else { baseX = 324 + dodgeX; baseY = 650 + dodgeY; }
+                    }
+                } else if (player.combatStyle === 'inside_puncher') {
+                    baseX = (side === 'left' ? 350 : 674) + dodgeX;
+                    baseY = 650 + dodgeY;
+                } else if (player.combatStyle === 'slugger') {
+                    baseX = (side === 'left' ? 180 : 844) + dodgeX;
+                    baseY = 780 + dodgeY; // Wide and low
+                } else if (player.combatStyle === 'hitman') {
+                    if (player.handedness === 'orthodox') {
+                        if (side === 'left') { baseX = 200 + dodgeX; baseY = 800 + dodgeY; } // Flicker jab low
+                        else { baseX = 650 + dodgeX; baseY = 620 + dodgeY; } // High rear guard
+                    } else {
+                        if (side === 'right') { baseX = 824 + dodgeX; baseY = 800 + dodgeY; }
+                        else { baseX = 374 + dodgeX; baseY = 620 + dodgeY; }
+                    }
+                } else if (player.combatStyle === 'swarmer') {
+                    baseX = (side === 'left' ? 400 : 624) + dodgeX;
+                    baseY = 630 + dodgeY; // Tight and high
+                }
+            }
+
+            let ease = arm.state === 'punching' ? 1 - Math.pow(1 - arm.progress, 4) : arm.progress;
+            let cx = baseX + (arm.targetX - baseX) * ease;
+            let cy = baseY + (arm.targetY - baseY) * ease;
+
+            // Elbow calculations for jointed arms
+            let elbowX = baseX + (cx - baseX) * 0.5;
+            let elbowY = baseY + (cy - baseY) * 0.5 + 50;
+
+            // Apply different animations based on punch type
+            if (arm.punchType === 'overhead' || arm.punchType === 'heavy_overhead' || arm.punchType === 'overhand') {
+                if (player.combatStyle === 'slugger') {
+                    cy -= Math.sin(arm.progress * Math.PI) * (arm.punchType === 'heavy_overhead' ? 260 : 220); // Hugely elevated
+                    cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 70; // Wider swing
+                } else {
+                    cy -= Math.sin(arm.progress * Math.PI) * (arm.punchType === 'heavy_overhead' ? 220 : 180);
+                    if (arm.punchType === 'heavy_overhead' || arm.punchType === 'overhand') cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 50;
+                }
+                elbowY -= Math.sin(arm.progress * Math.PI) * 150;
+                elbowX += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 100;
+            } else if (arm.punchType === 'uppercut' || arm.punchType === 'bolo' || arm.punchType === 'lead_uppercut') {
+                if (player.combatStyle === 'inside_puncher' || player.combatStyle === 'swarmer') {
+                    cy += Math.sin(arm.progress * Math.PI) * 120; // Tighter, shorter uppercut
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 60; // Less windup
+                } else if (player.combatStyle === 'showboat' && arm.punchType === 'bolo') {
+                    cy += Math.sin(arm.progress * Math.PI) * 250; // Exaggerated windup
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 160;
+                } else {
+                    cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 200 : 150);
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 120 : 80);
+                }
+                elbowY += Math.sin(arm.progress * Math.PI) * 100;
+            } else if (arm.punchType === 'haymaker') {
+                if (player.combatStyle === 'slugger') {
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 250; // Massive swing
+                    cy -= Math.sin(arm.progress * Math.PI) * 50;
+                    elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 230;
+                } else {
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200;
+                    cy -= Math.sin(arm.progress * Math.PI) * 30;
+                    elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200;
+                }
+            } else if (arm.punchType === 'body_hook' || arm.punchType === 'shovel_hook' || arm.punchType === 'liver_shot') {
+                if (player.combatStyle === 'inside_puncher' || player.combatStyle === 'swarmer') {
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 130 : 90); // Tighter hook
+                    cy += Math.sin(arm.progress * Math.PI) * 90;
+                } else {
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 160 : 120);
+                    cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 140 : 100);
+                }
+                elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 150;
+                elbowY += Math.sin(arm.progress * Math.PI) * 80;
+            } else if (arm.punchType === 'jab' || arm.punchType === 'cross' || arm.punchType === 'straight') {
+                if (player.combatStyle === 'outboxer') {
+                    // Outboxer gets a sharper, more linear and extending jab/straight
+                    cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 40;
+                    cy -= Math.sin(arm.progress * Math.PI) * 30; // More vertical pop
+                    elbowY -= Math.sin(arm.progress * Math.PI) * 40; // Elbow comes up slightly for a straight punch
+                } else if (player.combatStyle === 'hitman') {
+                    cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 50; // Extreme reach
+                    cy -= Math.sin(arm.progress * Math.PI) * 20;
+                    elbowY -= Math.sin(arm.progress * Math.PI) * 20;
+                } else {
+                    cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 20;
+                    cy -= Math.sin(arm.progress * Math.PI) * 10;
+                }
+            } else if (arm.punchType === 'flicker_jab') {
+                if (player.combatStyle === 'hitman') {
+                    cy += Math.sin(arm.progress * Math.PI) * 120; // Whipping motion from low
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 20;
+                    elbowY += Math.sin(arm.progress * Math.PI) * 150;
+                } else {
+                    cy += Math.sin(arm.progress * Math.PI) * 80;
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 40;
+                    elbowY += Math.sin(arm.progress * Math.PI) * 120;
+                }
+            } else if (arm.punchType === 'smash') {
+                if (player.combatStyle === 'peekaboo') {
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 100; // Tighter, faster
+                    cy += Math.sin(arm.progress * Math.PI) * 120; // More vertical
+                } else {
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 140;
+                    cy += Math.sin(arm.progress * Math.PI) * 100;
+                }
+                elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 120;
+                elbowY += Math.sin(arm.progress * Math.PI) * 120;
+            } else if (arm.punchType === 'gazelle_punch') {
+                if (player.combatStyle === 'peekaboo') {
+                    cy -= Math.sin(arm.progress * Math.PI) * 80; // More leaping
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 80; // Tighter
+                } else {
+                    cy -= Math.sin(arm.progress * Math.PI) * 50;
+                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 100;
+                }
+                elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 100;
+            } else if (arm.punchType === 'pull_counter') {
+                if (player.combatStyle === 'mayweather') {
+                    if (arm.progress < 0.3) {
+                        cy += 30; cx += (side === 'left' ? -1 : 1) * 40; // Deeper pull
+                    } else {
+                        cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 40; // Sharper counter
+                        cy -= Math.sin(arm.progress * Math.PI) * 20;
+                    }
+                } else {
+                    if (arm.progress < 0.3) {
+                        cy += 20; cx += (side === 'left' ? -1 : 1) * 30;
+                    } else {
+                        cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 20;
+                        cy -= Math.sin(arm.progress * Math.PI) * 10;
+                    }
+                }
+            }
+
+            let radius = 120 - (ease * 65);
+
+            if (arm.progress > 0 || arm.state === 'idle') {
+                // Shadow / Outline
+                ctx.strokeStyle = skinDark; ctx.globalAlpha = 1.0; ctx.lineWidth = radius * 1.6; ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.quadraticCurveTo(elbowX, elbowY, cx, cy); ctx.stroke();
+
+                // Base skin color
+                ctx.strokeStyle = skinBase; ctx.lineWidth = radius * 1.3;
+                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.quadraticCurveTo(elbowX, elbowY, cx, cy); ctx.stroke();
+
+                // Highlight
+                ctx.strokeStyle = skinHigh; ctx.lineWidth = radius * 0.5; ctx.globalAlpha = 0.6;
+                ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.quadraticCurveTo(elbowX, elbowY, cx, cy); ctx.stroke();
+                ctx.globalAlpha = 1.0;
+
+                // Muscle definition (Bicep/Forearm crease)
+                ctx.save();
+                ctx.translate(elbowX, elbowY);
+                let angle = Math.atan2(cy - elbowY, cx - elbowX);
+                ctx.rotate(angle);
+                ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = radius * 0.15;
+                ctx.beginPath(); ctx.moveTo(-radius * 0.2, -radius * 0.5); ctx.quadraticCurveTo(0, 0, -radius * 0.2, radius * 0.5); ctx.stroke();
+                ctx.restore();
+            }
+
+            if (arm.state === 'idle') { cx += Math.sin(Date.now()*0.003 + (side==='left'?0:Math.PI))*12; cy += Math.cos(Date.now()*0.004)*12; }
+
+            let gloveScale = 1 + (player.stats.power - 10) * 0.02;
+            drawDetailedGlove(cx, cy, radius * gloveScale, player.color);
+        });
+    }
+
+    function drawDetailedGlove(x, y, r, color) {
+        let darkColor = mixColor(color, '#000', 0.6); let lightColor = mixColor(color, '#fff', 0.4);
+
+        let grd = ctx.createRadialGradient(x - r*0.2, y - r*0.2, r*0.1, x, y, r);
+        grd.addColorStop(0, '#fff'); grd.addColorStop(0.15, lightColor); grd.addColorStop(0.5, color); grd.addColorStop(1, darkColor);
+
+        ctx.fillStyle = grd; ctx.beginPath(); ctx.ellipse(x, y, r, r*1.2, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x - r*0.5, y + r*0.3, r*0.4, r*0.6, Math.PI/6, 0, Math.PI*2); ctx.fill();
+
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.fillRect(x - r*0.6, y + r*0.9, r*1.2, r*0.4);
+
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = r * 0.08; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(x - r*0.3, y - r*0.2); ctx.quadraticCurveTo(x, y + r*0.6, x + r*0.5, y + r*0.2); ctx.stroke();
+
+        // Glove wrinkles and texture
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = r * 0.04;
+        ctx.beginPath(); ctx.moveTo(x - r*0.4, y); ctx.quadraticCurveTo(x, y + r*0.2, x + r*0.2, y - r*0.1); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - r*0.2, y + r*0.3); ctx.quadraticCurveTo(x + r*0.2, y + r*0.4, x + r*0.6, y + r*0.1); ctx.stroke();
+
+        // Shine/Reflection on leather
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.beginPath(); ctx.ellipse(x - r*0.3, y - r*0.4, r*0.3, r*0.15, -0.4, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = r * 0.05;
+        ctx.beginPath(); ctx.ellipse(x, y - r*0.7, r*0.6, r*0.2, -0.2, 0, Math.PI); ctx.stroke();
+    }
+
+    /* drawCrosshair removed */
+
+    // Safely declared drawParticles function
+    function drawParticles() {
+        particles.forEach(p => {
+            if (p.type === 'sweat') {
+                ctx.fillStyle = `rgba(200, 230, 255, ${p.life})`;
+                ctx.beginPath(); ctx.arc(p.x, p.y, 2 + p.life*3, 0, Math.PI*2); ctx.fill();
+            } else if (p.type === 'blood') {
+                ctx.fillStyle = `rgba(180, 0, 0, ${p.life})`;
+                ctx.beginPath(); ctx.arc(p.x, p.y, 3 + p.life*4, 0, Math.PI*2); ctx.fill();
+            }
+        });
+    }
+
+    function mixColor(hex1, hex2, weight) {
+        if(weight <= 0) return hex1; if(weight >= 1) return hex2;
+        let c1 = hexToRgb(hex1); let c2 = hexToRgb(hex2);
+        return `rgb(${Math.round(c1.r*(1-weight)+c2.r*weight)},${Math.round(c1.g*(1-weight)+c2.g*weight)},${Math.round(c1.b*(1-weight)+c2.b*weight)})`;
+    }
+
+    function hexToRgb(hex) {
+        let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : {r:0,g:0,b:0};
+    }
+
+    function loop(timestamp) {
+        let dt = timestamp - lastTime; lastTime = timestamp; if (dt > 100) dt = 16;
+        update(dt); draw(); requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
