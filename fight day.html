@@ -607,26 +607,6 @@
         if (headHit || bodyHit) {
             let staminaPenalty = 0.6 + 0.4 * (player.arms[side].sta / player.arms[side].maxSta);
             let dmg = ((player.stats.power * 1.3) + (Math.random() * 5)) * staminaPenalty;
-
-            // Combat style damage bonuses
-            let pType = player.arms[side].punchType;
-            if (player.combatStyle === 'outboxer' && ['jab', 'straight', 'cross'].includes(pType)) {
-                dmg *= 1.3;
-            } else if (player.combatStyle === 'inside_puncher' && ['uppercut', 'lead_uppercut', 'body_hook', 'shovel_hook', 'liver_shot'].includes(pType)) {
-                dmg *= 1.3;
-            } else if (player.combatStyle === 'peekaboo' && ['smash', 'gazelle_punch', 'liver_shot'].includes(pType)) {
-                dmg *= 1.4;
-            } else if (player.combatStyle === 'showboat' && ['bolo', 'uppercut'].includes(pType)) {
-                dmg *= 1.25;
-            } else if (player.combatStyle === 'mayweather' && ['pull_counter', 'cross'].includes(pType)) {
-                dmg *= 1.4;
-            } else if (player.combatStyle === 'slugger' && ['haymaker', 'heavy_overhead', 'overhand', 'overhead'].includes(pType)) {
-                dmg *= 1.5;
-            } else if (player.combatStyle === 'hitman' && ['flicker_jab', 'cross'].includes(pType)) {
-                dmg *= 1.3;
-            } else if (player.combatStyle === 'swarmer' && ['body_hook', 'shovel_hook', 'uppercut', 'lead_uppercut'].includes(pType)) {
-                dmg *= 1.2;
-            }
             if (player.arms.left.punchType === 'haymaker' || player.arms.right.punchType === 'haymaker' || player.arms.right.punchType === 'heavy_overhead' || player.arms.right.punchType === 'bolo') {
                 // If the arm that hit was a heavy punch... wait, resolvePlayerHit doesn't know WHICH arm hit.
                 // We can approximate by checking if ANY arm is currently punching with a heavy type
@@ -763,30 +743,8 @@
 
         let pSpeedMod = player.exhausted ? 0.03 : (0.07 + (player.stats.speed * 0.0025));
         ['left', 'right'].forEach(side => {
-            if (player.arms[side].state === 'punching') {
-                let pType = player.arms[side].punchType;
-
-                // Base modifier for heavy punches
-                let isHeavy = ['haymaker', 'heavy_overhead', 'bolo'].includes(pType);
-                if (isHeavy) pSpeedMod *= 0.65;
-
-                // Style-specific speed bonuses
-                if (player.combatStyle === 'outboxer' && ['jab', 'straight', 'cross'].includes(pType)) {
-                    pSpeedMod *= 1.25;
-                } else if (player.combatStyle === 'inside_puncher' && ['uppercut', 'lead_uppercut', 'body_hook', 'shovel_hook', 'liver_shot'].includes(pType)) {
-                    pSpeedMod *= 1.20;
-                } else if (player.combatStyle === 'peekaboo' && ['smash', 'gazelle_punch', 'liver_shot'].includes(pType)) {
-                    pSpeedMod *= 1.30;
-                } else if (player.combatStyle === 'showboat' && ['bolo', 'uppercut'].includes(pType)) {
-                    if (pType === 'bolo') pSpeedMod *= 1.4; // Counteract the heavy slowdown
-                    else pSpeedMod *= 1.25;
-                } else if (player.combatStyle === 'mayweather' && ['pull_counter', 'cross'].includes(pType)) {
-                    pSpeedMod *= 1.35;
-                } else if (player.combatStyle === 'hitman' && ['flicker_jab', 'cross'].includes(pType)) {
-                    pSpeedMod *= 1.35;
-                } else if (player.combatStyle === 'swarmer' && ['body_hook', 'shovel_hook', 'uppercut', 'lead_uppercut'].includes(pType)) {
-                    pSpeedMod *= 1.30;
-                }
+            if (player.arms[side].state === 'punching' && ['haymaker', 'heavy_overhead', 'bolo'].includes(player.arms[side].punchType)) {
+                pSpeedMod *= 0.65; // Slow down heavy punches
             }
         });
         ['left', 'right'].forEach(side => {
@@ -1580,105 +1538,45 @@
 
             // Apply different animations based on punch type
             if (arm.punchType === 'overhead' || arm.punchType === 'heavy_overhead' || arm.punchType === 'overhand') {
-                if (player.combatStyle === 'slugger') {
-                    cy -= Math.sin(arm.progress * Math.PI) * (arm.punchType === 'heavy_overhead' ? 260 : 220); // Hugely elevated
-                    cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 70; // Wider swing
-                } else {
-                    cy -= Math.sin(arm.progress * Math.PI) * (arm.punchType === 'heavy_overhead' ? 220 : 180);
-                    if (arm.punchType === 'heavy_overhead' || arm.punchType === 'overhand') cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 50;
-                }
+                cy -= Math.sin(arm.progress * Math.PI) * (arm.punchType === 'heavy_overhead' ? 220 : 180);
+                if (arm.punchType === 'heavy_overhead' || arm.punchType === 'overhand') cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 50;
                 elbowY -= Math.sin(arm.progress * Math.PI) * 150;
                 elbowX += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 100;
             } else if (arm.punchType === 'uppercut' || arm.punchType === 'bolo' || arm.punchType === 'lead_uppercut') {
-                if (player.combatStyle === 'inside_puncher' || player.combatStyle === 'swarmer') {
-                    cy += Math.sin(arm.progress * Math.PI) * 120; // Tighter, shorter uppercut
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 60; // Less windup
-                } else if (player.combatStyle === 'showboat' && arm.punchType === 'bolo') {
-                    cy += Math.sin(arm.progress * Math.PI) * 250; // Exaggerated windup
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 160;
-                } else {
-                    cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 200 : 150);
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 120 : 80);
-                }
+                cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 200 : 150);
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'bolo' ? 120 : 80);
                 elbowY += Math.sin(arm.progress * Math.PI) * 100;
             } else if (arm.punchType === 'haymaker') {
-                if (player.combatStyle === 'slugger') {
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 250; // Massive swing
-                    cy -= Math.sin(arm.progress * Math.PI) * 50;
-                    elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 230;
-                } else {
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200;
-                    cy -= Math.sin(arm.progress * Math.PI) * 30;
-                    elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200;
-                }
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200;
+                cy -= Math.sin(arm.progress * Math.PI) * 30;
+                elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 200;
             } else if (arm.punchType === 'body_hook' || arm.punchType === 'shovel_hook' || arm.punchType === 'liver_shot') {
-                if (player.combatStyle === 'inside_puncher' || player.combatStyle === 'swarmer') {
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 130 : 90); // Tighter hook
-                    cy += Math.sin(arm.progress * Math.PI) * 90;
-                } else {
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 160 : 120);
-                    cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 140 : 100);
-                }
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 160 : 120);
+                cy += Math.sin(arm.progress * Math.PI) * (arm.punchType === 'liver_shot' ? 140 : 100);
                 elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 150;
                 elbowY += Math.sin(arm.progress * Math.PI) * 80;
             } else if (arm.punchType === 'jab' || arm.punchType === 'cross' || arm.punchType === 'straight') {
-                if (player.combatStyle === 'outboxer') {
-                    // Outboxer gets a sharper, more linear and extending jab/straight
-                    cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 40;
-                    cy -= Math.sin(arm.progress * Math.PI) * 30; // More vertical pop
-                    elbowY -= Math.sin(arm.progress * Math.PI) * 40; // Elbow comes up slightly for a straight punch
-                } else if (player.combatStyle === 'hitman') {
-                    cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 50; // Extreme reach
-                    cy -= Math.sin(arm.progress * Math.PI) * 20;
-                    elbowY -= Math.sin(arm.progress * Math.PI) * 20;
-                } else {
-                    cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 20;
-                    cy -= Math.sin(arm.progress * Math.PI) * 10;
-                }
+                cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 20;
+                cy -= Math.sin(arm.progress * Math.PI) * 10;
             } else if (arm.punchType === 'flicker_jab') {
-                if (player.combatStyle === 'hitman') {
-                    cy += Math.sin(arm.progress * Math.PI) * 120; // Whipping motion from low
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 20;
-                    elbowY += Math.sin(arm.progress * Math.PI) * 150;
-                } else {
-                    cy += Math.sin(arm.progress * Math.PI) * 80;
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 40;
-                    elbowY += Math.sin(arm.progress * Math.PI) * 120;
-                }
+                cy += Math.sin(arm.progress * Math.PI) * 80;
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 40;
+                elbowY += Math.sin(arm.progress * Math.PI) * 120;
             } else if (arm.punchType === 'smash') {
-                if (player.combatStyle === 'peekaboo') {
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 100; // Tighter, faster
-                    cy += Math.sin(arm.progress * Math.PI) * 120; // More vertical
-                } else {
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 140;
-                    cy += Math.sin(arm.progress * Math.PI) * 100;
-                }
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 140;
+                cy += Math.sin(arm.progress * Math.PI) * 100;
                 elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 120;
                 elbowY += Math.sin(arm.progress * Math.PI) * 120;
             } else if (arm.punchType === 'gazelle_punch') {
-                if (player.combatStyle === 'peekaboo') {
-                    cy -= Math.sin(arm.progress * Math.PI) * 80; // More leaping
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 80; // Tighter
-                } else {
-                    cy -= Math.sin(arm.progress * Math.PI) * 50;
-                    cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 100;
-                }
+                cy -= Math.sin(arm.progress * Math.PI) * 50;
+                cx += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 100;
                 elbowX += (side === 'left' ? -1 : 1) * Math.sin(arm.progress * Math.PI) * 100;
             } else if (arm.punchType === 'pull_counter') {
-                if (player.combatStyle === 'mayweather') {
-                    if (arm.progress < 0.3) {
-                        cy += 30; cx += (side === 'left' ? -1 : 1) * 40; // Deeper pull
-                    } else {
-                        cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 40; // Sharper counter
-                        cy -= Math.sin(arm.progress * Math.PI) * 20;
-                    }
+                if (arm.progress < 0.3) {
+                    cy += 20; cx += (side === 'left' ? -1 : 1) * 30;
                 } else {
-                    if (arm.progress < 0.3) {
-                        cy += 20; cx += (side === 'left' ? -1 : 1) * 30;
-                    } else {
-                        cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 20;
-                        cy -= Math.sin(arm.progress * Math.PI) * 10;
-                    }
+                    cx += (side === 'left' ? 1 : -1) * Math.sin(arm.progress * Math.PI) * 20;
+                    cy -= Math.sin(arm.progress * Math.PI) * 10;
                 }
             }
 
