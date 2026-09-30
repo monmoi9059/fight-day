@@ -1031,8 +1031,15 @@
         let sW = 95 * b.scaleX; 
         let wW = (65 * b.scaleX) + (50 * b.belly); 
         let bH = 190 * b.scaleY; 
-        
-        ctx.shadowColor = 'rgba(0, 150, 255, 0.4)'; ctx.shadowBlur = 20;
+
+        // Dynamic Floor Drop Shadow
+        let floorY = oy + bH + 200;
+        let shadowW = wW * 2.5 + (100 - opponent.hp/opponent.maxHp * 50); // Wider if hurt/knocked down
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath(); ctx.ellipse(ox, floorY, shadowW, 20, 0, 0, Math.PI*2); ctx.fill();
+
+        // Rim Lighting
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.3)'; ctx.shadowBlur = 15;
 
         // Solid Neck Base (Drawn before torso so torso overlaps it)
         let neckWidth = 22 * b.scaleX + (8 * b.muscle);
@@ -1157,13 +1164,24 @@
         ctx.lineTo(ox + wW + 20, trY + 80); ctx.lineTo(ox - wW - 20, trY + 80); ctx.fill();
         
 
-        // Sweat Sheen (increases as stamina drops)
-        let sweatAlpha = Math.max(0, (100 - opponent.sta) / 100) * 0.3;
+        // Enhanced Sweat Sheen (increases as stamina drops)
+        let sweatAlpha = Math.max(0, (opponent.maxSta - opponent.sta) / opponent.maxSta) * 0.6; // Increased max opacity
         if (sweatAlpha > 0.05) {
             ctx.fillStyle = `rgba(255, 255, 255, ${sweatAlpha})`;
-            ctx.beginPath(); ctx.ellipse(ox - sW*0.5, oy + 40, sW*0.2, 10, -0.2, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.ellipse(ox + sW*0.5, oy + 40, sW*0.2, 10, 0.2, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.ellipse(ox, oy + 80, 10, 30, 0, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 10; ctx.shadowColor = 'rgba(255,255,255,0.5)'; // Add glow to sweat
+
+            // Chest sweat
+            ctx.beginPath(); ctx.ellipse(ox - sW*0.5, oy + 40, sW*0.2, 15, -0.2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(ox + sW*0.5, oy + 40, sW*0.2, 15, 0.2, 0, Math.PI*2); ctx.fill();
+
+            // Ab sweat
+            ctx.beginPath(); ctx.ellipse(ox, oy + 80, 15, 35, 0, 0, Math.PI*2); ctx.fill();
+
+            // Shoulder sweat
+            ctx.beginPath(); ctx.ellipse(ox - sW, oy + 20, 10, 20, -0.5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(ox + sW, oy + 20, 10, 20, 0.5, 0, Math.PI*2); ctx.fill();
+
+            ctx.shadowBlur = 0; // Reset
         }
 
         ctx.fillStyle = '#111'; ctx.fillRect(ox - wW - 10, trY - 10, (wW*2) + 20, 25);
@@ -1450,7 +1468,6 @@
         let dodgeY = Math.abs(player.dodgeOffset) * 0.1;
 
         // Draw Player Shoulders/Torso Silhouette
-        ctx.fillStyle = skinBase;
         ctx.strokeStyle = skinDark;
         ctx.lineWidth = 15;
         ctx.lineJoin = 'round';
@@ -1462,10 +1479,19 @@
         // Stance Specific Shoulders
         let isOrthodox = player.handedness === 'orthodox';
 
+        // Breathing animation
+        let breathY = Math.sin(Date.now() * 0.002) * 5;
+
         // Left shoulder
         let leftShoulderY = isOrthodox ? 580 : 680;
         leftShoulderY -= (buildScale - 1) * 30; // higher shoulders
+        leftShoulderY += breathY;
         let leftShoulderW = (isOrthodox ? 280 : 200) * buildScale;
+
+        let lGrd = ctx.createRadialGradient(leftShoulderW/2 + dodgeX, leftShoulderY + dodgeY + 50, 20, leftShoulderW/2 + dodgeX, leftShoulderY + dodgeY + 100, 150);
+        lGrd.addColorStop(0, skinHigh); lGrd.addColorStop(0.4, skinBase); lGrd.addColorStop(1, skinDark);
+        ctx.fillStyle = lGrd;
+
         ctx.beginPath();
         ctx.moveTo(0, 768);
         ctx.quadraticCurveTo(leftShoulderW/2 + dodgeX, leftShoulderY + dodgeY, leftShoulderW + dodgeX, 768);
@@ -1474,11 +1500,23 @@
         // Right shoulder
         let rightShoulderY = isOrthodox ? 680 : 580;
         rightShoulderY -= (buildScale - 1) * 30;
+        rightShoulderY += breathY;
         let rightShoulderW = (isOrthodox ? 200 : 280) * buildScale;
+
+        let rGrd = ctx.createRadialGradient(1024 - rightShoulderW/2 + dodgeX, rightShoulderY + dodgeY + 50, 20, 1024 - rightShoulderW/2 + dodgeX, rightShoulderY + dodgeY + 100, 150);
+        rGrd.addColorStop(0, skinHigh); rGrd.addColorStop(0.4, skinBase); rGrd.addColorStop(1, skinDark);
+        ctx.fillStyle = rGrd;
+
         ctx.beginPath();
         ctx.moveTo(1024, 768);
         ctx.quadraticCurveTo(1024 - rightShoulderW/2 + dodgeX, rightShoulderY + dodgeY, 1024 - rightShoulderW + dodgeX, 768);
         ctx.fill(); ctx.stroke();
+
+        // Collarbone Details
+        ctx.strokeStyle = `rgba(0,0,0,0.3)`; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(leftShoulderW*0.6 + dodgeX, leftShoulderY + dodgeY + 40); ctx.quadraticCurveTo(leftShoulderW*0.8 + dodgeX, leftShoulderY + dodgeY + 60, leftShoulderW + dodgeX - 20, 768 - 100); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(1024 - rightShoulderW*0.6 + dodgeX, rightShoulderY + dodgeY + 40); ctx.quadraticCurveTo(1024 - rightShoulderW*0.8 + dodgeX, rightShoulderY + dodgeY + 60, 1024 - rightShoulderW + dodgeX + 20, 768 - 100); ctx.stroke();
+
 
         ['left', 'right'].forEach(side => {
             let arm = player.arms[side];
